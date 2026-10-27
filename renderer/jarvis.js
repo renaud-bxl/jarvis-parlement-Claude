@@ -7,37 +7,60 @@
   const onPage = () => !!$('jv');
   J.state.jh = J.state.jh || [];
 
-  // ---------- Orbe ----------
-  const COL = { idle: ['#1f6fd1', '#9fcaff'], listening: ['#ffd21f', '#fff4b8'], thinking: ['#8fbcff', '#ffffff'], speaking: ['#3d9bff', '#ffd21f'] };
+  // ---------- Orbe « cockpit » : anneaux qui tournent, barres vocales, « J » central ----------
+  const COL = { idle: ['#3d8bff', '#9fcaff'], listening: ['#ffd21f', '#fff2a8'], thinking: ['#6fb1ff', '#ffffff'], speaking: ['#35a2ff', '#ffd21f'] };
   const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
   let cur = [hex(COL.idle[0]), hex(COL.idle[1])];
   const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
   const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  const GOLD = [255, 210, 31];
   function startOrb(canvas) {
-    const g = canvas.getContext('2d'); const W = canvas.width, C = W / 2; let t = 0, lv = 0;
+    const g = canvas.getContext('2d'); const W = canvas.width, C = W / 2; let t = 0, lv = 0, spin = 0;
+    const N = 132;
     const draw = () => {
       if (!canvas.isConnected) return;
       t += 0.016; const target = COL[H.state] || COL.idle;
       cur = [mix(cur[0], hex(target[0]), 0.06), mix(cur[1], hex(target[1]), 0.06)];
-      let want = 0.06 + 0.04 * Math.sin(t * 1.4);
-      if (H.state === 'listening') want = Math.min(1, H.level * 9);
-      else if (H.state === 'speaking') want = 0.35 + 0.3 * Math.abs(Math.sin(t * 6.3) * Math.sin(t * 2.1 + 1));
-      else if (H.state === 'thinking') want = 0.18;
-      lv += (want - lv) * 0.18;
-      const base = W * 0.2 * (1 + lv * 0.16);
+      let want = 0.07 + 0.05 * Math.sin(t * 1.3);
+      if (H.state === 'listening') want = Math.min(1, 0.12 + H.level * 10);
+      else if (H.state === 'speaking') want = 0.45 + 0.4 * Math.abs(Math.sin(t * 5.1) * Math.sin(t * 2.3 + 1));
+      else if (H.state === 'thinking') want = 0.16;
+      lv += (want - lv) * 0.2; spin += (H.state === 'thinking' ? 0.045 : 0.006);
       g.clearRect(0, 0, W, W);
-      const glow = g.createRadialGradient(C, C, base * 0.4, C, C, W * 0.5);
-      glow.addColorStop(0, rgb(cur[0], 0.28 + lv * 0.25)); glow.addColorStop(1, rgb(cur[0], 0));
-      g.fillStyle = glow; g.fillRect(0, 0, W, W);
-      for (let k = 2; k >= 0; k--) {
-        g.beginPath(); const amp = 3 + lv * (16 + k * 6), rr = base * (1.2 + k * 0.17), sp = H.state === 'thinking' ? 2.6 : 1;
-        for (let i = 0; i <= 120; i++) { const a = (i / 120) * Math.PI * 2; const r = rr + Math.sin(a * (3 + k) + t * (1 + k * 0.5) * sp) * amp + Math.sin(a * (5 - k) - t * 1.3 * sp) * amp * 0.5; const x = C + Math.cos(a) * r, y = C + Math.sin(a) * r; i ? g.lineTo(x, y) : g.moveTo(x, y); }
-        g.closePath(); g.strokeStyle = rgb(k === 1 ? cur[1] : cur[0], 0.7 - k * 0.2); g.lineWidth = 2.2 - k * 0.5; g.stroke();
+      // halo
+      const halo = g.createRadialGradient(C, C, W * 0.12, C, C, W * 0.5);
+      halo.addColorStop(0, rgb(cur[0], 0.32 + lv * 0.28)); halo.addColorStop(0.55, rgb(cur[0], 0.08)); halo.addColorStop(1, rgb(cur[0], 0));
+      g.fillStyle = halo; g.fillRect(0, 0, W, W);
+      // anneau de graduations
+      g.save(); g.translate(C, C); g.rotate(spin * 0.4);
+      for (let i = 0; i < 180; i++) { const a = (i / 180) * Math.PI * 2, big = i % 5 === 0; g.beginPath(); g.moveTo(Math.cos(a) * W * 0.465, Math.sin(a) * W * 0.465); g.lineTo(Math.cos(a) * W * (big ? 0.445 : 0.455), Math.sin(a) * W * (big ? 0.445 : 0.455)); g.strokeStyle = rgb(big ? cur[1] : cur[0], big ? 0.55 : 0.3); g.lineWidth = big ? 2.4 : 1.4; g.stroke(); }
+      g.restore();
+      // arcs dorés
+      g.save(); g.translate(C, C); g.rotate(-spin * 1.6 - t * 0.12); g.lineCap = 'round';
+      [[0.1, 1.1], [1.9, 2.5], [3.6, 5.0]].forEach(([a0, a1], k) => { g.beginPath(); g.arc(0, 0, W * (0.425 - k * 0.012), a0 + k, a1 + k * 0.6); g.strokeStyle = rgb(GOLD, 0.95 - k * 0.2); g.lineWidth = 5 - k; g.shadowColor = rgb(GOLD, 0.8); g.shadowBlur = 14; g.stroke(); });
+      g.restore(); g.shadowBlur = 0;
+      // anneau bleu fin + segment lumineux
+      g.beginPath(); g.arc(C, C, W * 0.385, 0, Math.PI * 2); g.strokeStyle = rgb(cur[0], 0.45); g.lineWidth = 2; g.stroke();
+      g.save(); g.translate(C, C); g.rotate(spin * 2.2 + t * 0.35); g.beginPath(); g.arc(0, 0, W * 0.385, 0, Math.PI * 0.45); g.strokeStyle = rgb(cur[1], 0.95); g.lineWidth = 4; g.lineCap = 'round'; g.shadowColor = rgb(cur[0], 1); g.shadowBlur = 16; g.stroke(); g.restore(); g.shadowBlur = 0;
+      // barres vocales
+      const r0 = W * 0.285;
+      for (let i = 0; i < N; i++) {
+        const a = (i / N) * Math.PI * 2 - Math.PI / 2;
+        const n = (Math.sin(i * 0.9 + t * 3.1) + Math.sin(i * 2.3 - t * 2.2) + Math.sin(i * 0.37 + t * 1.1) + 3) / 6;
+        const len = W * (0.012 + n * (0.01 + lv * 0.085));
+        g.beginPath(); g.moveTo(C + Math.cos(a) * r0, C + Math.sin(a) * r0); g.lineTo(C + Math.cos(a) * (r0 + len), C + Math.sin(a) * (r0 + len));
+        g.strokeStyle = rgb(mix(cur[0], cur[1], (Math.sin(a * 2 + t) + 1) / 2), 0.9); g.lineWidth = W * 0.0065; g.lineCap = 'round'; g.stroke();
       }
-      if (H.state === 'thinking') { g.save(); g.translate(C, C); g.rotate(t * 2.4); g.beginPath(); g.arc(0, 0, base * 1.5, 0, Math.PI * 0.55); g.strokeStyle = rgb(cur[1], 0.95); g.lineWidth = 3; g.lineCap = 'round'; g.stroke(); g.restore(); }
-      const core = g.createRadialGradient(C - base * 0.3, C - base * 0.35, base * 0.1, C, C, base);
-      core.addColorStop(0, rgb(cur[1], 1)); core.addColorStop(0.55, rgb(cur[0], 0.95)); core.addColorStop(1, rgb(mix(cur[0], [7, 48, 106], 0.6), 0.95));
-      g.beginPath(); g.arc(C, C, base, 0, Math.PI * 2); g.fillStyle = core; g.shadowColor = rgb(cur[0], 0.8); g.shadowBlur = 40 + lv * 50; g.fill(); g.shadowBlur = 0;
+      // disque central
+      const R = W * 0.255 * (1 + lv * 0.03);
+      const core = g.createRadialGradient(C, C - R * 0.3, R * 0.1, C, C, R);
+      core.addColorStop(0, '#0f3a82'); core.addColorStop(0.65, '#0a2559'); core.addColorStop(1, '#061a3f');
+      g.beginPath(); g.arc(C, C, R, 0, Math.PI * 2); g.fillStyle = core; g.shadowColor = rgb(cur[0], 0.9); g.shadowBlur = 28 + lv * 40; g.fill(); g.shadowBlur = 0;
+      g.lineWidth = 3; g.strokeStyle = rgb(cur[1], 0.85); g.stroke();
+      g.beginPath(); g.arc(C, C, R * 0.88, 0, Math.PI * 2); g.strokeStyle = rgb(cur[0], 0.35); g.lineWidth = 1.5; g.stroke();
+      // « J »
+      g.font = `700 ${Math.round(R * 1.15)}px "Helvetica Neue", Helvetica, Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.shadowColor = rgb(GOLD, 0.85); g.shadowBlur = 18 + lv * 36; g.fillStyle = H.state === 'thinking' ? `rgba(255,210,31,${0.65 + 0.35 * Math.sin(t * 6)})` : '#ffd21f'; g.fillText('J', C, C + R * 0.06); g.shadowBlur = 0;
       requestAnimationFrame(draw);
     };
     draw();
@@ -52,12 +75,13 @@
 
   // ---------- Affichage ----------
   const typeIn = (el, text) => { el.textContent = text; el.classList.add('in'); };
+  const CHIP = { mails: ['✉', 'Check mes mails'], veille: ['◎', 'Faire une veille'], redaction: ['✎', 'Rédiger une question'], briefing: ['☀', 'Briefing du jour'], agenda: ['▦', 'Mon agenda'], recherche: ['⌕', 'Recherche'], documents: ['▤', 'Mes documents'], dossiers: ['▣', 'Mes dossiers'] };
   function renderAbilities(g, animate) {
-    const ul = $('jvCan'); if (!ul) return;
-    const items = g.abilities.slice(0, 4);
-    ul.innerHTML = g.ready ? items.map((a, i) => `<li data-i="${i}" class="${animate ? '' : 'in'}"><button data-act="jvAbility" data-id="${a.id}">Je peux <b>${J.esc(a.say)}</b></button></li>`).join('') + `<li class="more ${animate ? '' : 'in'}"><span>…et bien d'autres choses : courrier, agenda, documents, dossiers, mémoire.</span></li>`
-      : `<li class="in"><button data-act="jvSetup">Configurer mon moteur d'IA →</button></li>`;
-    if (animate) [...ul.children].forEach((li, i) => setTimeout(() => li.classList.add('in'), i * 900));
+    const ul = $('jvCan'), ch = $('jvChips'); if (!ul || !ch) return;
+    if (!g.ready) { ul.innerHTML = ''; ch.innerHTML = `<button class="in" data-act="jvSetup"><i>⚙</i>Configurer mon moteur d’IA</button>`; return; }
+    ul.innerHTML = `<li class="${animate ? '' : 'in'}">Je peux <b>checker vos mails</b></li><li class="${animate ? '' : 'in'}">Je peux <b>faire une veille sur un sujet</b></li><li class="soft ${animate ? '' : 'in'}">…et bien d’autres choses : courrier, agenda, documents, dossiers, mémoire.</li>`;
+    ch.innerHTML = g.abilities.map((a) => `<button class="${animate ? '' : 'in'}" data-act="jvAbility" data-id="${a.id}"><i>${(CHIP[a.id] || ['•'])[0]}</i>${J.esc((CHIP[a.id] || [0, a.label])[1])}</button>`).join('');
+    if (animate) { [...ul.children].forEach((li, i) => setTimeout(() => li.classList.add('in'), i * 900)); [...ch.children].forEach((b, i) => setTimeout(() => b.classList.add('in'), 2000 + i * 140)); }
   }
   function showOut(res) {
     const out = $('jvOut'); if (!out) return;
@@ -130,30 +154,32 @@
     } finally { H.loop = false; if (onPage() && H.state !== 'speaking' && !H.listening) setState('idle'); }
   }
   const halt = () => { J.stopReading(); H.token++; if (H.listening) { H.listening.stop(); H.listening = null; } J.stopSpeak(); H.loop = false; H.state = 'idle'; };
-  J.leave = halt;
+  J.leave = () => { halt(); const m = $('main'); if (m) m.classList.remove('jv-main'); };
 
   // ---------- Page ----------
   J.pages.accueil = async (root) => {
-    halt(); H.empties = 0;
+    halt(); H.empties = 0; $('main').classList.add('jv-main');
     const g = await J.call('jarvis.greeting'); const first = !J.state.greeted; const muted = store.get('muted', false);
     const nom = g.nom;
     root.innerHTML = `<div id="jv" class="jv${first ? '' : ' compact'}">
-      <div class="jv-top"><span class="jv-parl">${J.esc(J.parlName(J.P.actif))}</span><span class="row"><a class="jv-link" href="#tableau">Tableau de bord</a><button class="jv-ico" id="jvMute" data-act="jvMute" title="Couper ou activer la voix de Jarvis">${muted ? '🔇' : '🔊'}</button></span></div>
-      <button class="orb-btn" id="orbBtn" data-act="jvOrb" data-state="idle" aria-label="Parler à Jarvis"><canvas id="orb" width="640" height="640"></canvas></button>
+      <div class="jv-top"><span class="jv-parl">Parlement actif : <b>${J.esc(J.parlName(J.P.actif))}</b></span><span class="row"><a class="jv-link" href="#tableau">Tableau de bord</a><button class="jv-ico" id="jvMute" data-act="jvMute" title="Couper ou activer la voix de Jarvis">${muted ? '🔇' : '🔊'}</button></span></div>
+      <div class="jv-eyebrow">VOTRE ASSISTANT PARLEMENTAIRE</div>
+      <button class="orb-btn" id="orbBtn" data-act="jvOrb" data-state="idle" aria-label="Parler à Jarvis"><canvas id="orb" width="1000" height="1000"></canvas></button>
       <div class="jv-hello" id="jvHello" aria-live="polite">
         <div class="h1" id="jh1">Bonjour</div>
         ${nom ? `<div class="h2" id="jh2">${J.esc(nom)}</div>` : ''}
         <div class="h3" id="jh3">Que puis-je faire pour vous aujourd’hui ?</div>
       </div>
       ${J.S._env.piperReady || store.get('voiceLater', false) ? '' : `<div class="jv-voice" id="jvVoice"><span>🎙 Pour une <b>vraie voix humaine</b> (gratuite, hors-ligne, ≈ 21 Mo), choisissez la mienne :</span><span class="row"><button data-act="jvVoiceInstall" data-id="siwis">Voix de femme</button><button data-act="jvVoiceInstall" data-id="tom">Voix d’homme</button><button class="ghost" data-act="jvVoiceLater">Plus tard</button></span><span class="small" id="progress"></span></div>`}
-      <ul class="jv-can" id="jvCan"></ul>
+      <ul class="jv-lines" id="jvCan"></ul>
+      <div class="jv-chips" id="jvChips"></div>
       <div class="jv-status" id="jvStatus"></div>
       <div class="jv-heard" id="jvHeard"></div>
       <div class="jv-say" id="jvSay"></div>
       <div id="jvOut" class="jv-out"></div>
       <div class="jv-bar">
-        <button class="jv-mic" data-act="jvOrb" title="Parler (touchez à nouveau pour terminer)">🎤</button>
-        <input id="jvIn" placeholder="Parlez, ou écrivez : « check mes mails », « fais une veille sur… », « rédige une question sur… »" autocomplete="off">
+        <button class="jv-mic" data-act="jvOrb" title="Parler (touchez à nouveau pour terminer)">🎤 Parler à Jarvis</button>
+        <input id="jvIn" placeholder="Dites-moi : « Fais une veille sur le logement à Bruxelles »…" autocomplete="off">
         <button class="pri" data-act="jvSend">Envoyer</button>
       </div>
       <label class="jv-conv"><input type="checkbox" id="jvConv" ${store.get('converse', true) ? 'checked' : ''}> Conversation continue (j’écoute à nouveau après chaque réponse)</label>

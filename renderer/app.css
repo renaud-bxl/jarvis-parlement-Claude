@@ -1,20 +1,20 @@
-:root{--bg:#f6f4ef;--card:#fff;--ink:#1b2333;--mute:#6b7385;--line:#e6e2d8;--side:#121b2f;--side2:#1b2742;--acc:#23508a;--acc2:#c8963e;--ok:#2f7d57;--warn:#b7791f;--ko:#b3412f;--soft:#eef2f8;--r:12px;--shadow:0 1px 2px rgba(20,30,50,.05),0 6px 18px rgba(20,30,50,.05)}
-@media (prefers-color-scheme:dark){:root{--bg:#10151f;--card:#18202e;--ink:#e9edf5;--mute:#98a2b6;--line:#2a3447;--side:#0a0f19;--side2:#141c2d;--acc:#6aa3ee;--soft:#1d2738;--shadow:none}}
+:root{--bg:#f6f4ef;--card:#fff;--ink:#1b2333;--mute:#6b7385;--line:#e6e2d8;--side:#06142f;--side2:#0d2350;--acc:#23508a;--acc2:#c8963e;--ok:#2f7d57;--warn:#b7791f;--ko:#b3412f;--soft:#eef2f8;--r:12px;--shadow:0 1px 2px rgba(20,30,50,.05),0 6px 18px rgba(20,30,50,.05)}
+@media (prefers-color-scheme:dark){:root{--bg:#071530;--card:#0e2247;--ink:#eaf1ff;--mute:#9db3d8;--line:#1f3a6e;--side:#050f26;--side2:#0d2350;--acc:#4f8ff0;--acc2:#ffd21f;--soft:#12295a;--shadow:none}}
 *{box-sizing:border-box}html,body{height:100%;margin:0}
 body{font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
 #app{display:flex;height:100%}
 .drag{-webkit-app-region:drag;height:34px;flex:none}.drag.top{position:absolute;left:230px;right:0;top:0;z-index:5}
-#side{width:230px;background:var(--side);color:#cfd6e6;display:flex;flex-direction:column;flex:none;padding-bottom:12px}
+#side{width:230px;background:linear-gradient(180deg,#06142f 0%,#040d22 100%);border-right:1px solid rgba(120,160,255,.12);color:#cfd6e6;display:flex;flex-direction:column;flex:none;padding-bottom:12px}
 .brand{display:flex;gap:10px;align-items:center;padding:4px 18px 14px}
-.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--acc2),#e8c373);color:#1b2333;font-weight:800;font-size:19px;display:grid;place-items:center}
-.brand b{display:block;color:#fff;font-size:16px;line-height:1.1}.brand small{color:#8e9bb8;font-size:12px}
+.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#ffd21f,#ffb800);box-shadow:0 0 18px rgba(255,210,31,.35);color:#1b2333;font-weight:800;font-size:19px;display:grid;place-items:center}
+.brand b{display:block;color:#fff;font-size:17px;line-height:1.1;letter-spacing:.14em;font-weight:700}.brand small{color:#8ea6d6;font-size:8.5px;letter-spacing:.12em;white-space:nowrap}
 .parl-switch{padding:0 14px 12px}.parl-switch label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:#8e9bb8;margin:0 4px 5px}
-.parl-switch select{width:100%;background:var(--side2);color:#fff;border:1px solid #2c3a5a;border-radius:8px;padding:7px 8px;font-size:13px}
+.parl-switch select{width:100%;background:rgba(79,143,240,.1);color:#fff;border:1px solid rgba(120,160,255,.25);border-radius:8px;padding:7px 8px;font-size:13px}
 #nav{flex:1;overflow:auto;padding:4px 10px}
 #nav a{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;color:#b9c3da;text-decoration:none;cursor:pointer;margin-bottom:2px}
-#nav a:hover{background:var(--side2);color:#fff}#nav a.on{background:var(--acc);color:#fff}
+#nav a:hover{background:rgba(79,143,240,.14);color:#fff}#nav a.on{background:linear-gradient(90deg,rgba(79,143,240,.42),rgba(79,143,240,.12));color:#fff;box-shadow:inset 3px 0 0 #ffd21f}
 #nav svg{width:17px;height:17px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
-#nav .sep{height:1px;background:#222d49;margin:8px 6px}
+#nav .sep{height:1px;background:rgba(120,160,255,.14);margin:8px 6px}
 .side-foot{padding:6px 18px}.badge{font-size:12px;color:#8e9bb8}.badge i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--ko)}.badge.ok i{background:#4cc38a}
 #main{flex:1;overflow:auto;position:relative}
 #view{max-width:1120px;margin:0 auto;padding:40px 36px 70px}
@@ -58,3 +58,7 @@ input[type=radio]{width:auto;margin-right:6px}
 .mailframe{width:100%;height:120px;border:1px solid var(--line);border-radius:10px;background:#fff;display:block}
 .mailtext{white-space:pre-wrap;font:inherit;margin:0;padding:10px 12px;background:var(--soft);border-radius:10px;max-height:420px;overflow:auto}
 .mailcard.reading{outline:2px solid var(--acc2);box-shadow:0 0 0 5px color-mix(in srgb,var(--acc2) 25%,transparent)}
+
+/* Écran Jarvis : plein cadre, sans marge */
+#main.jv-main{background:radial-gradient(130% 80% at 50% 8%,#0b2d63 0%,#071a3d 38%,#040c20 100%)}
+#main.jv-main #view{max-width:none;padding:0;margin:0}
