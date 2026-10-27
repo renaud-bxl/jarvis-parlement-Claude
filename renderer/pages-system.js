@@ -45,7 +45,6 @@ J.act.cSend = (el) => J.busy(el, async () => {
 // ---------- RÉGLAGES ----------
 J.pages.reglages = async (root) => {
   await J.refreshMeta(); const s = J.S, p = s.profile, ai = s.ai;
-  const models = ai.provider === 'ollama' ? await J.call('ai.localModels').catch(() => []) : [];
   root.innerHTML = `<h1>Réglages</h1><p class="sub">Profil, moteur IA, confidentialité. Données stockées dans <span class="path">${J.esc(s._env.dataDir)}</span></p>
     ${s.firstRunDone ? '' : '<div class="banner"><b>Bienvenue !</b> Renseigne ton profil et ton moteur IA : c\'est tout ce qu\'il faut pour démarrer.</div>'}
     <div class="card"><h2>👤 Profil</h2><div class="grid g3"><div><label class="f">Nom</label><input id="pNom" value="${J.esc(p.nom)}"></div><div><label class="f">Titre</label><input id="pTitre" value="${J.esc(p.titre)}"></div><div><label class="f">Groupe politique</label><input id="pGroupe" value="${J.esc(p.groupe)}"></div>
@@ -54,13 +53,13 @@ J.pages.reglages = async (root) => {
     <div class="card"><h2>🤖 Moteur IA</h2>
       <div class="grid g2"><div><label class="f">Fournisseur</label><select id="aProv"><option value="anthropic" ${ai.provider === 'anthropic' ? 'selected' : ''}>Claude (Anthropic) — recherche web intégrée</option><option value="ollama" ${ai.provider === 'ollama' ? 'selected' : ''}>Ollama — 100 % local</option><option value="openai" ${ai.provider === 'openai' ? 'selected' : ''}>Compatible OpenAI (autre serveur)</option></select></div>
       <div><label class="f">Recherche web</label><label class="chk"><input type="checkbox" id="aWeb" ${ai.webSearch ? 'checked' : ''}> Autoriser Jarvis à chercher sur le web</label></div></div>
-      <div id="provAnthropic" ${ai.provider === 'anthropic' ? '' : 'hidden'}><div class="grid g3"><div><label class="f">Clé API Anthropic</label><input id="aKey" type="password" placeholder="${s._secrets.anthropic_key ? '•••••• (enregistrée)' : 'sk-ant-…'}"></div><div><label class="f">Modèle principal</label><input id="aModel" value="${J.esc(ai.model)}"></div><div><label class="f">Modèle rapide (mémoire, tri)</label><input id="aFast" value="${J.esc(ai.fastModel)}"></div></div>
+      <div id="provAnthropic" ${ai.provider === 'anthropic' ? '' : 'hidden'}><div class="grid g3"><div><label class="f">Clé API Anthropic</label><input id="aKey" type="password" placeholder="${s._secrets.anthropic_key ? '•••••• (enregistrée)' : 'sk-ant-…'}"></div><div><label class="f">Modèle principal</label><select id="aModel" data-cur="${J.esc(ai.model)}"><option>${J.esc(ai.model)}</option></select></div><div><label class="f">Modèle rapide (mémoire, tri)</label><select id="aFast" data-cur="${J.esc(ai.fastModel)}"><option>${J.esc(ai.fastModel)}</option></select></div></div><div class="row"><span id="aModelsMsg" class="muted small"></span><button class="sm ghost" data-act="aRefresh">↻ Actualiser la liste</button></div>
         <p class="muted small">Clé à créer sur <a data-ext="1" href="https://console.anthropic.com/settings/keys">console.anthropic.com</a> (facturation à l'usage, distincte de l'abonnement Claude).</p></div>
-      <div id="provLocal" ${ai.provider === 'anthropic' ? 'hidden' : ''}><div class="grid g3"><div><label class="f">Adresse du serveur</label><input id="aBase" value="${J.esc(ai.baseUrl)}"></div><div><label class="f">Modèle</label>${models.length ? `<select id="aLocal">${models.map((m) => `<option ${m === ai.localModel ? 'selected' : ''}>${J.esc(m)}</option>`).join('')}</select>` : `<input id="aLocal" value="${J.esc(ai.localModel)}" placeholder="llama3.1, mistral…">`}</div><div><label class="f">Clé (si nécessaire)</label><input id="aKey2" type="password" placeholder="${s._secrets.openai_key ? '•••••• (enregistrée)' : 'optionnel'}"></div></div>
-        <p class="muted small">Ollama : installe-le depuis <a data-ext="1" href="https://ollama.com">ollama.com</a> puis <code>ollama pull mistral</code>. Avec un moteur local, tes documents ne quittent jamais ton Mac.</p></div>
+      <div id="provLocal" ${ai.provider === 'anthropic' ? 'hidden' : ''}><div class="grid g3"><div><label class="f">Adresse du serveur</label><input id="aBase" value="${J.esc(ai.baseUrl)}"></div><div><label class="f">Modèle</label><select id="aLocal" data-cur="${J.esc(ai.localModel)}"><option>${J.esc(ai.localModel)}</option></select></div><div><label class="f">Clé (si nécessaire)</label><input id="aKey2" type="password" placeholder="${s._secrets.openai_key ? '•••••• (enregistrée)' : 'optionnel'}"></div></div>
+        <p class="muted small" id="aLocalMsg" style="color:var(--warn)"></p><p class="muted small">Ollama : installe-le depuis <a data-ext="1" href="https://ollama.com">ollama.com</a> puis <code>ollama pull mistral</code>. Avec un moteur local, tes documents ne quittent jamais ton Mac.</p></div>
       <div class="row" style="margin-top:10px"><button class="pri" data-act="saveSettings">Enregistrer</button><button data-act="testAI">Tester le moteur</button></div></div>
     <div class="card"><h2>🎙️ Voix</h2>
-      <p class="muted small"><b>Parler</b> : <a data-ext="1" href="https://github.com/rhasspy/piper">Piper</a>, moteur open source et gratuit, 100 % hors-ligne, voix françaises naturelles (femme / homme). <b>Écouter</b> : micro transcrit par Whisper (OpenAI avec une clé, ou serveur local open source type whisper.cpp). Sans cela, la dictée macOS (Fn Fn) marche dans tous les champs.</p>
+      <p class="muted small"><b>Parler</b> : voix humaines françaises open source (modèles <a data-ext="1" href="https://github.com/rhasspy/piper">Piper</a>), gratuites et 100 % hors-ligne : deux voix de femme, deux voix d'homme. Choisis la tienne ci-dessous. <b>Écouter</b> : reconnaissance vocale de macOS, gratuite et intégrée (rien à configurer). Whisper reste possible en option ci-dessous.</p>
       <h3>Voix de Jarvis</h3><div id="vPiper" class="muted small">Chargement des voix…</div>
       <div class="grid g3" style="margin-top:8px"><div><label class="f">Vitesse</label><input id="vRate" type="range" min="0.7" max="1.4" step="0.05" value="${s.voice.ttsRate}"></div>
       <div><label class="f">Voix système (secours)</label><select id="vVoice"></select></div><div><label class="f">&nbsp;</label><button data-act="vTest">🔊 Tester la voix</button> <button class="ghost" data-act="speakStop">⏹</button></div></div>
@@ -71,8 +70,29 @@ J.pages.reglages = async (root) => {
       <p class="muted small">Les clés et mots de passe sont chiffrés par le trousseau macOS ${s._env.encrypted ? '(actif ✓)' : '(indisponible ✗)'}. Aucune télémétrie.</p></div>`;
   const fillVoices = () => { const vs = J.voices(); document.getElementById('vVoice').innerHTML = vs.length ? vs.map((v) => `<option value="${J.esc(v.name)}" ${v.name === s.voice.ttsVoice ? 'selected' : ''}>${J.esc(v.name)} (${v.lang})</option>`).join('') : '<option value="">Voix par défaut</option>'; };
   J.drawPiper(); fillVoices(); if (window.speechSynthesis) speechSynthesis.onvoiceschanged = fillVoices;
-  document.getElementById('aProv').addEventListener('change', (e) => { document.getElementById('provAnthropic').hidden = e.target.value !== 'anthropic'; document.getElementById('provLocal').hidden = e.target.value === 'anthropic'; });
+  document.getElementById('aProv').addEventListener('change', (e) => { document.getElementById('provAnthropic').hidden = e.target.value !== 'anthropic'; document.getElementById('provLocal').hidden = e.target.value === 'anthropic'; if (e.target.value === 'ollama') document.getElementById('aBase').value = 'http://localhost:11434/v1'; J.loadModels(); });
+  ['aKey', 'aKey2', 'aBase'].forEach((id) => document.getElementById(id)?.addEventListener('change', () => J.loadModels()));
+  J.loadModels();
 };
+// Remplit automatiquement les listes de modèles selon le fournisseur (et la clé / l'adresse saisies).
+J.loadModels = async () => {
+  const prov = J.val('aProv'); const anth = prov === 'anthropic';
+  const ids = anth ? ['aModel', 'aFast'] : ['aLocal']; const msg = document.getElementById('aModelsMsg');
+  if (anth && msg) msg.textContent = 'Recherche des modèles…';
+  const r = await J.call('ai.models', { provider: prov, baseUrl: J.val('aBase'), key: (anth ? J.val('aKey') : J.val('aKey2')) || undefined });
+  const list = r.models || [];
+  for (const id of ids) {
+    const el = document.getElementById(id); if (!el) continue; const cur = el.dataset.cur || el.value;
+    if (!list.length) { el.outerHTML = `<input id="${id}" data-cur="${J.esc(cur)}" value="${J.esc(cur)}" placeholder="nom du modèle">`; continue; }
+    const pref = id === 'aFast' ? (list.find((m) => /haiku/i.test(m.id)) || {}).id : (list.find((m) => /sonnet/i.test(m.id)) || {}).id;
+    const keep = list.some((m) => m.id === cur); const sel = keep ? cur : (pref || list[0].id);
+    const html = list.map((m) => `<option value="${J.esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${J.esc(m.label)}${m.label !== m.id ? ' — ' + J.esc(m.id) : ''}</option>`).join('');
+    if (el.tagName === 'SELECT') el.innerHTML = html; else el.outerHTML = `<select id="${id}" data-cur="${J.esc(cur)}">${html}</select>`;
+  }
+  if (msg) msg.textContent = list.length ? `${list.length} modèles disponibles` : (r.error || '');
+  const la = document.getElementById('aLocalMsg'); if (la) la.textContent = list.length ? '' : (r.error || '');
+};
+J.act.aRefresh = () => J.loadModels();
 J.act.saveSettings = (el) => J.busy(el, async () => {
   const prov = J.val('aProv');
   await J.call('settings.set', { profile: { nom: J.val('pNom'), titre: J.val('pTitre'), groupe: J.val('pGroupe'), parti: J.val('pParti'), circonscription: J.val('pCirc'), langue: J.val('pLang'), signature: J.val('pSig') },
@@ -83,14 +103,14 @@ J.act.saveSettings = (el) => J.busy(el, async () => {
 });
 J.act.testAI = (el) => J.busy(el, async () => { const r = await J.call('ai.test'); J.toast(`Moteur OK : ${r.model} (${r.ms} ms)`, 'ok'); }, 'Test…');
 J.drawPiper = async () => {
-  const st = await J.call('voice.status'); const cur = J.S.voice.engine === 'piper' ? J.S.voice.piperVoice : '';
-  document.getElementById('vPiper').innerHTML = st.voices.map((v) => `<div class="row sp" style="padding:5px 0;border-bottom:1px solid var(--line)"><span><b>${J.esc(v.label)}</b> <span class="pill">${v.gender}</span> ${v.installed ? '<span class="pill ok">installée</span>' : `<span class="muted">≈ ${v.mb} Mo${st.engineInstalled ? '' : ' + moteur 19 Mo'}</span>`} ${cur === v.id ? '<span class="pill gold">utilisée</span>' : ''}</span>
-    <span class="row">${v.installed ? `<button class="sm" data-act="vUse" data-id="${v.id}">Utiliser</button><button class="sm danger" data-act="vDel" data-id="${v.id}">Supprimer</button>` : `<button class="sm pri" data-act="vInstall" data-id="${v.id}">Télécharger</button>`}</span></div>`).join('')
-    + `<div class="row" style="margin-top:8px"><label class="chk" style="margin:0"><input type="radio" name="vEng" id="vEngSys" ${J.S.voice.engine !== 'piper' ? 'checked' : ''}> Utiliser la voix système macOS à la place</label></div>`;
+  const st = await J.call('voice.status'); const cur = J.S.voice.engine === 'piper' && st.voices.find((x) => x.id === J.S.voice.piperVoice)?.installed ? J.S.voice.piperVoice : '';
+  document.getElementById('vPiper').innerHTML = st.voices.map((v) => `<div class="row sp" style="padding:5px 0;border-bottom:1px solid var(--line)"><span><b>${J.esc(v.label)}</b> <span class="pill">${v.gender}</span> ${v.installed ? '<span class="pill ok">installée</span>' : `<span class="muted">≈ ${v.mb} Mo</span>`} ${cur === v.id ? '<span class="pill gold">utilisée</span>' : ''}</span>
+    <span class="row">${v.installed ? `<button class="sm" data-act="vUse" data-id="${v.id}">▶ Écouter et utiliser</button><button class="sm danger" data-act="vDel" data-id="${v.id}">Supprimer</button>` : `<button class="sm pri" data-act="vInstall" data-id="${v.id}">Télécharger et utiliser</button>`}</span></div>`).join('')
+    + `<div class="row" style="margin-top:8px"><label class="chk" style="margin:0"><input type="radio" name="vEng" id="vEngSys" ${cur ? '' : 'checked'}> Utiliser la voix système macOS à la place</label></div>`;
   document.getElementById('vEngSys').addEventListener('change', async () => { await J.call('settings.set', { voice: { engine: 'system' } }); await J.refreshMeta(); J.drawPiper(); });
 };
 J.act.vInstall = (el) => J.busy(el, async () => { await J.call('voice.install', { voiceId: el.dataset.id }); await J.refreshMeta(); J.toast('Voix installée et activée', 'ok'); J.drawPiper(); }, 'Téléchargement…');
-J.act.vUse = async (el) => { await J.call('settings.set', { voice: { engine: 'piper', piperVoice: el.dataset.id } }); await J.refreshMeta(); J.drawPiper(); J.speak('Bonjour, je suis Jarvis.'); };
+J.act.vUse = async (el) => { await J.call('settings.set', { voice: { engine: 'piper', piperVoice: el.dataset.id } }); await J.refreshMeta(); J.drawPiper(); J.speak('Bonjour, je suis Jarvis. Voici ma voix.'); };
 J.act.vDel = async (el) => { if (!confirm('Supprimer cette voix ?')) return; await J.call('voice.removeVoice', { voiceId: el.dataset.id }); if (J.S.voice.piperVoice === el.dataset.id) await J.call('settings.set', { voice: { engine: 'system' } }); await J.refreshMeta(); J.drawPiper(); };
 J.act.vTest = () => { J.S.voice = { ...J.S.voice, ttsVoice: J.val('vVoice'), ttsRate: J.val('vRate') }; J.call('settings.set', { voice: { ttsRate: Number(J.val('vRate')), ttsVoice: J.val('vVoice') } }); J.speak('Bonjour, je suis Jarvis. Je suis prêt à travailler avec vous.'); };
 J.act.vSave = async () => { await J.call('settings.set', { voice: { ttsVoice: J.val('vVoice'), ttsRate: Number(J.val('vRate')), sttUrl: J.val('vUrl').trim(), sttModel: J.val('vModel').trim() } }); const k = J.val('vKey'); if (k && k.trim()) await J.call('secret.set', { name: 'stt_key', value: k.trim() }); await J.refreshMeta(); J.toast('Voix enregistrée', 'ok'); J.render(); };

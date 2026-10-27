@@ -115,7 +115,7 @@ J.speak = async (text) => {
   J.speaking = true; try { await speakInner(chunks, my); } finally { if (my === speakToken) J.speaking = false; }
 };
 const speakInner = async (chunks, my) => {
-  if ((J.S?.voice?.engine) === 'piper') {
+  if ((J.S?.voice?.engine) === 'piper' && J.S?._env?.piperReady) {
     try {
       let next = J.call('voice.synth', { text: chunks[0] });
       for (let i = 0; i < chunks.length; i++) { const wav = await next; if (my !== speakToken) return; next = i + 1 < chunks.length ? J.call('voice.synth', { text: chunks[i + 1] }) : null; if (next) next.catch(() => {}); await playWav(wav, my); }

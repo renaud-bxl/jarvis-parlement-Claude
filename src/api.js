@@ -29,7 +29,7 @@ function create(ctx) {
     'settings.get': () => {
       const s = store.settings.get();
       return { ...s, _secrets: { anthropic_key: store.hasSecret('anthropic_key'), openai_key: store.hasSecret('openai_key'), google_client_secret: store.hasSecret('google_client_secret'), stt_key: store.hasSecret('stt_key') },
-        _env: { sttReady: voice.configured(), sttEngine: voice.engine(), local: llm.isLocal(), configured: llm.configured(), dataDir: store.DIR, encrypted: store.canEncrypt() } };
+        _env: { piperReady: voice.piperReady(), sttReady: voice.configured(), sttEngine: voice.engine(), local: llm.isLocal(), configured: llm.configured(), dataDir: store.DIR, encrypted: store.canEncrypt() } };
     },
     'settings.set': (patch) => { store.settings.set(patch); store.settings.set({ firstRunDone: true }); workspace.ensureAll(); return true; },
     // ---- Parlements multiples ----
@@ -56,6 +56,7 @@ function create(ctx) {
     'secret.set': ({ name, value }) => { if (!SECRETS.has(name)) throw new Error('Secret inconnu.'); store.setSecret(name, value); return true; },
     'ai.test': () => llm.ping(),
     'ai.localModels': () => llm.listLocalModels(),
+    'ai.models': (a) => llm.listModels(a),
 
     // ---- Cerveau ----
     'brain.list': () => brain.list(),

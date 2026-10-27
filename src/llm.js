@@ -152,4 +152,26 @@ async function listLocalModels() {
   } catch { return []; }
 }
 
-module.exports = { complete, ping, isLocal, configured, parseJson, listLocalModels };
+// Liste des modèles disponibles selon le fournisseur choisi (clé / adresse éventuellement saisies mais pas encore enregistrées).
+async function listModels({ provider, baseUrl, key } = {}) {
+  const ai = cfg(); const prov = provider || ai.provider;
+  try {
+    if (prov === 'anthropic') {
+      const k = key || store.getSecret('anthropic_key');
+      if (!k) return { models: [], error: 'Entre ta clé API pour voir les modèles disponibles.' };
+      const j = await httpJson(ANTHROPIC_URL.replace(/\/messages$/, '/models?limit=100'), { headers: { 'x-api-key': k, 'anthropic-version': '2023-06-01' }, signal: AbortSignal.timeout(8000) }, 'Claude');
+      return { models: (j.data || []).map((m) => ({ id: m.id, label: m.display_name || m.id })) };
+    }
+    const base = (baseUrl || ai.baseUrl || 'http://localhost:11434/v1').replace(/\/$/, '');
+    if (prov === 'ollama') {
+      const r = await fetch(base.replace(/\/v1$/, '') + '/api/tags', { signal: AbortSignal.timeout(4000) }); const j = await r.json();
+      const ms = (j.models || []).map((m) => ({ id: m.name, label: m.name }));
+      return ms.length ? { models: ms } : { models: [], error: "Ollama répond mais aucun modèle n'est installé : lance « ollama pull mistral »." };
+    }
+    const k = key || store.getSecret('openai_key');
+    const j = await httpJson(base + '/models', { headers: k ? { authorization: 'Bearer ' + k } : {}, signal: AbortSignal.timeout(8000) }, 'Serveur');
+    return { models: (j.data || j.models || []).map((m) => ({ id: m.id || m.name, label: m.id || m.name })).filter((m) => m.id) };
+  } catch (e) { return { models: [], error: prov === 'ollama' ? "Ollama ne répond pas : est-il lancé ? (ollama.com)" : e.message }; }
+}
+
+module.exports = { complete, ping, isLocal, configured, parseJson, listLocalModels, listModels };

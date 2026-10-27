@@ -1,28 +1,37 @@
-// Voix. PARLER : Piper (open source, gratuit, 100 % hors-ligne, voix françaises féminines et masculines), téléchargé à la demande.
-// ÉCOUTER : transcription Whisper via une API compatible OpenAI (OpenAI, ou serveur local open source type whisper.cpp).
+// Voix. PARLER : voix humaines françaises open source (modèles Piper/VITS) exécutées hors-ligne par « jarvis-speak » (moteur sherpa-onnx, Apache-2.0), fourni avec l'app ;
+// seules les voix (≈ 21 Mo chacune) sont téléchargées, à la demande.
+// ÉCOUTER : reconnaissance vocale macOS (gratuite) ou Whisper via une API compatible OpenAI.
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFile, spawn } = require('child_process');
 const store = require('./store');
 
-const PIPER_VERSION = '2023.11.14-2';
-const HF = 'https://huggingface.co/rhasspy/piper-voices/resolve/main/fr/fr_FR';
+const MODELS_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models';
 const VOICES = [
-  { id: 'siwis', label: 'Siwis', gender: 'femme', path: 'siwis/medium/fr_FR-siwis-medium', mb: 63 },
-  { id: 'tom', label: 'Tom', gender: 'homme', path: 'tom/medium/fr_FR-tom-medium', mb: 64 },
-  { id: 'gilles', label: 'Gilles (léger)', gender: 'homme', path: 'gilles/low/fr_FR-gilles-low', mb: 63 },
+  { id: 'siwis', label: 'Siwis', gender: 'femme', model: 'vits-piper-fr_FR-siwis-medium-int8', sid: 0, mb: 21 },
+  { id: 'jessica', label: 'Jessica', gender: 'femme', model: 'vits-piper-fr_FR-upmc-medium-int8', sid: 0, mb: 23 },
+  { id: 'tom', label: 'Tom', gender: 'homme', model: 'vits-piper-fr_FR-tom-medium-int8', sid: 0, mb: 21 },
+  { id: 'pierre', label: 'Pierre', gender: 'homme', model: 'vits-piper-fr_FR-upmc-medium-int8', sid: 1, mb: 23 },
 ];
 const vdir = () => path.join(store.DIR, 'voice');
-const piperDir = () => path.join(vdir(), 'piper');
-const piperBin = () => path.join(piperDir(), 'piper');
-const modelPath = (v) => path.join(vdir(), 'models', path.basename(v.path) + '.onnx');
+const modelDir = (v) => path.join(vdir(), 'models', v.model);
+const hasModel = (v) => fs.existsSync(path.join(modelDir(v), 'tokens.txt')) && fs.existsSync(path.join(modelDir(v), 'espeak-ng-data'));
+const speakBin = () => [
+  process.resourcesPath && path.join(process.resourcesPath, 'jarvis-speak'),
+  path.join(__dirname, '..', 'native', 'build', 'jarvis-speak'),
+].filter(Boolean).find((p) => fs.existsSync(p));
+
+function piperReady() {
+  const cfg = store.settings.get().voice; const v = VOICES.find((x) => x.id === cfg.piperVoice) || VOICES[0];
+  return !!speakBin() && hasModel(v);
+}
 
 function status() {
   return {
-    engineInstalled: fs.existsSync(piperBin()),
+    engineInstalled: !!speakBin(),
     arch: process.arch,
-    voices: VOICES.map((v) => ({ ...v, installed: fs.existsSync(modelPath(v)) && fs.existsSync(modelPath(v) + '.json') })),
+    voices: VOICES.map((v) => ({ ...v, installed: hasModel(v) })),
   };
 }
 
@@ -39,51 +48,64 @@ async function download(url, dest, onProgress) {
 
 const run = (cmd, args, opts) => new Promise((res, rej) => execFile(cmd, args, opts, (e, so, se) => (e ? rej(new Error(se || e.message)) : res(so))));
 
-// Installe le moteur Piper (≈ 19 Mo) si absent, puis la voix choisie.
+// Télécharge la voix choisie (≈ 21 Mo) si absente, puis l'active.
 async function install(voiceId, emit = () => {}) {
   const v = VOICES.find((x) => x.id === voiceId); if (!v) throw new Error('Voix inconnue.');
-  if (!fs.existsSync(piperBin())) {
-    const arch = process.arch === 'arm64' ? 'aarch64' : 'x64';
-    const tgz = path.join(vdir(), 'piper.tar.gz');
-    emit('progress', { label: 'Téléchargement du moteur vocal Piper…' });
-    await download(`https://github.com/rhasspy/piper/releases/download/${PIPER_VERSION}/piper_macos_${arch}.tar.gz`, tgz, (p) => emit('progress', { label: `Moteur vocal : ${Math.round(p * 100)} %` }));
-    await run('tar', ['-xzf', tgz, '-C', vdir()]);
+  if (!speakBin()) throw new Error("Le moteur vocal n'est pas inclus dans cette version de l'app (réinstalle la dernière version).");
+  if (!hasModel(v)) {
+    const tgz = path.join(vdir(), v.model + '.tar.bz2');
+    await download(`${MODELS_URL}/${v.model}.tar.bz2`, tgz, (p) => emit('progress', { label: `Voix ${v.label} : ${Math.round(p * 100)} %` }));
+    emit('progress', { label: `Voix ${v.label} : installation…` });
+    fs.mkdirSync(path.join(vdir(), 'models'), { recursive: true });
+    await run('tar', ['-xjf', tgz, '-C', path.join(vdir(), 'models')]);
     fs.rmSync(tgz, { force: true });
-    if (!fs.existsSync(piperBin())) throw new Error('Moteur Piper introuvable après extraction.');
-    fs.chmodSync(piperBin(), 0o755);
+    if (!hasModel(v)) throw new Error('Voix introuvable après extraction.');
   }
-  const m = modelPath(v);
-  if (!fs.existsSync(m)) {
-    await download(`${HF}/${v.path}.onnx.json`, m + '.json');
-    await download(`${HF}/${v.path}.onnx`, m, (p) => emit('progress', { label: `Voix ${v.label} : ${Math.round(p * 100)} %` }));
-  }
+  fs.rmSync(path.join(vdir(), 'piper'), { recursive: true, force: true }); // ancien moteur (inutilisable) d'une version précédente
   store.settings.set({ voice: { engine: 'piper', piperVoice: v.id } });
   return status();
 }
 
 function removeVoice(voiceId) {
   const v = VOICES.find((x) => x.id === voiceId); if (!v) return status();
-  fs.rmSync(modelPath(v), { force: true }); fs.rmSync(modelPath(v) + '.json', { force: true }); return status();
+  stopEngines();
+  if (!VOICES.some((o) => o.id !== v.id && o.model === v.model && hasModel(o) && store.settings.get().voice.piperVoice === o.id)) fs.rmSync(modelDir(v), { recursive: true, force: true });
+  return status();
 }
 
-// Synthétise un court texte → WAV (base64). Le moteur est lancé sans shell, le texte passe par stdin.
+// Un processus « jarvis-speak » par modèle, gardé en vie pour répondre vite. Les demandes sont traitées une par une.
+const engines = new Map();
+function stopEngines() { for (const e of engines.values()) { try { e.proc.kill(); } catch { /* ok */ } } engines.clear(); }
+function engineFor(v) {
+  let e = engines.get(v.id); if (e) return e;
+  const proc = spawn(speakBin(), [modelDir(v), String(v.sid || 0)], { stdio: ['pipe', 'pipe', 'pipe'] });
+  e = { proc, buf: '', waiters: [], queue: Promise.resolve(), dead: false, err: '' };
+  const fail = (msg) => { e.dead = true; engines.delete(v.id); for (const w of e.waiters.splice(0)) w.reject(new Error(msg)); };
+  proc.stdout.on('data', (d) => { e.buf += d; let i; while ((i = e.buf.indexOf('\n')) >= 0) { const line = e.buf.slice(0, i).trim(); e.buf = e.buf.slice(i + 1); const w = e.waiters.shift(); if (w) (line === 'READY' || line === 'OK') ? w.resolve() : w.reject(new Error(line.replace(/^ERR /, ''))); } });
+  proc.stderr.on('data', (d) => { e.err = (e.err + d).slice(-300); });
+  proc.on('error', (er) => fail('Moteur vocal : ' + er.message));
+  proc.on('close', () => fail('Le moteur vocal s\'est arrêté. ' + e.err.trim().slice(-150)));
+  e.ready = new Promise((resolve, reject) => { e.waiters.push({ resolve, reject }); });
+  engines.set(v.id, e); return e;
+}
+
+// Synthétise un court texte → WAV (base64).
 function synth(text) {
   const cfg = store.settings.get().voice; const v = VOICES.find((x) => x.id === cfg.piperVoice) || VOICES[0];
-  if (!fs.existsSync(piperBin()) || !fs.existsSync(modelPath(v))) return Promise.reject(new Error('Voix Piper non installée (Réglages › Voix).'));
-  const out = path.join(os.tmpdir(), `jarvis-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.wav`);
+  if (!speakBin() || !hasModel(v)) return Promise.reject(new Error('Voix humaine non installée (Réglages › Voix).'));
   const rate = Math.min(1.5, Math.max(0.6, Number(cfg.ttsRate) || 1));
-  return new Promise((resolve, reject) => {
-    const p = spawn(piperBin(), ['--model', modelPath(v), '--output_file', out, '--length_scale', String(1 / rate)], { cwd: piperDir(), env: { ...process.env, DYLD_LIBRARY_PATH: piperDir() }, stdio: ['pipe', 'ignore', 'pipe'] });
-    let err = ''; p.stderr.on('data', (d) => { err += d; });
-    const timer = setTimeout(() => { p.kill(); reject(new Error('Synthèse vocale trop longue.')); }, 60000);
-    p.on('error', (e) => { clearTimeout(timer); reject(new Error('Piper : ' + e.message)); });
-    p.on('close', (code) => {
-      clearTimeout(timer);
-      try { if (code !== 0 || !fs.existsSync(out)) throw new Error('Piper a échoué : ' + err.slice(-200)); const b = fs.readFileSync(out).toString('base64'); fs.rmSync(out, { force: true }); resolve(b); }
-      catch (e) { fs.rmSync(out, { force: true }); reject(e); }
-    });
-    p.stdin.end(String(text).slice(0, 1500) + '\n');
+  const clean = String(text).replace(/[\t\r\n]+/g, ' ').trim().slice(0, 1500); if (!clean) return Promise.resolve('');
+  const e = engineFor(v);
+  const job = e.queue.then(async () => {
+    await Promise.race([e.ready, new Promise((_r, rej) => setTimeout(() => rej(new Error('Chargement de la voix trop long.')), 30000))]);
+    const out = path.join(os.tmpdir(), `jarvis-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.wav`);
+    const done = new Promise((resolve, reject) => { e.waiters.push({ resolve, reject }); });
+    e.proc.stdin.write(`${rate}\t${out}\t${clean}\n`);
+    const timer = setTimeout(() => { try { e.proc.kill(); } catch { /* ok */ } }, 60000);
+    try { await done; return fs.readFileSync(out).toString('base64'); } finally { clearTimeout(timer); fs.rmSync(out, { force: true }); }
   });
+  e.queue = job.catch(() => {});
+  return job;
 }
 
 // ---- Écoute (transcription) ----
@@ -133,4 +155,4 @@ async function transcribe({ audio, mime }) {
   return { text: (j?.text ?? txt).trim() };
 }
 
-module.exports = { VOICES, status, install, removeVoice, synth, configured, engine, macosReady, transcribe };
+module.exports = { VOICES, piperReady, status, install, removeVoice, synth, stopEngines, configured, engine, macosReady, transcribe };

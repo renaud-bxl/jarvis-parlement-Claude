@@ -76,5 +76,6 @@ const research = require('../src/research'); const mail = require('../src/mail')
   r = await jv.command({ text: 'rédige une question sur le tram 10' }).catch((e) => ({ ok: false, error: e.message })); assert(r.ok === true || /Texte de test|brouillon|Tram/.test(JSON.stringify(r))); ok('rédaction vocale → brouillon');
   r = await jv.command({ text: 'merci' }); assert(r.end === true); ok('« merci » termine la conversation');
   r = await jv.command({ text: 'retiens que je préfère des questions courtes' }); assert(/noté/.test(r.say)); ok('« retiens que… » alimente le cerveau');
+  const vc = require('../src/voice'); assert(vc.VOICES.some((x) => x.gender === 'femme') && vc.VOICES.some((x) => x.gender === 'homme')); assert(vc.status().voices.every((x) => x.installed === false)); ok('voix humaines : femmes et hommes proposés, aucune installée par défaut');
   console.log('\nTous les tests passent ✅'); fs.rmSync(tmp, { recursive: true, force: true });
 })().catch((e) => { console.error('\n❌ ÉCHEC :', e); process.exit(1); });

@@ -139,6 +139,7 @@
         ${nom ? `<div class="h2" id="jh2">${J.esc(nom)}</div>` : ''}
         <div class="h3" id="jh3">Que puis-je faire pour vous aujourd’hui ?</div>
       </div>
+      ${J.S._env.piperReady || store.get('voiceLater', false) ? '' : `<div class="jv-voice" id="jvVoice"><span>🎙 Pour une <b>vraie voix humaine</b> (gratuite, hors-ligne, ≈ 21 Mo), choisissez la mienne :</span><span class="row"><button data-act="jvVoiceInstall" data-id="siwis">Voix de femme</button><button data-act="jvVoiceInstall" data-id="tom">Voix d’homme</button><button class="ghost" data-act="jvVoiceLater">Plus tard</button></span><span class="small" id="progress"></span></div>`}
       <ul class="jv-can" id="jvCan"></ul>
       <div class="jv-status" id="jvStatus"></div>
       <div class="jv-heard" id="jvHeard"></div>
@@ -195,6 +196,12 @@
       else { input.value = ab.phrase; J.act.jvSend(); }
     });
   };
+  J.act.jvVoiceInstall = async (el) => {
+    const box = $('jvVoice'); box.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+    try { await J.call('voice.install', { voiceId: el.dataset.id }); await J.refreshMeta(); box.innerHTML = '<span>✓ Voix installée. Elle sera utilisée par défaut — vous pouvez en changer dans Réglages › Voix.</span>'; setTimeout(() => box.remove(), 6000); await say(el.dataset.id === 'tom' ? 'Bonjour, voici ma voix. Que puis-je faire pour vous ?' : 'Bonjour, voici ma voix. Que puis-je faire pour vous ?'); }
+    catch (e) { J.err(e); box.querySelectorAll('button').forEach((b) => { b.disabled = false; }); }
+  };
+  J.act.jvVoiceLater = () => { store.set('voiceLater', true); $('jvVoice')?.remove(); };
   J.act.jvSetup = () => J.go('reglages');
   J.act.jvGo = (el) => J.go(el.dataset.page);
   J.act.jvFile = (el) => J.call('app.openPath', { p: el.dataset.p });
