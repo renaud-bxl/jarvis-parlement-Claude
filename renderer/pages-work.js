@@ -112,9 +112,19 @@ J.act.addMail = () => J.modal(`<h2>Ajouter un compte IMAP / SMTP</h2><p class="m
 J.act.saveMail = async () => { await J.call('mail.add', { label: J.val('mLab'), email: J.val('mEm'), imapHost: J.val('mIh'), imapPort: J.val('mIp'), smtpHost: J.val('mSh'), smtpPort: J.val('mSp'), imapUser: J.val('mUs'), imapPass: J.val('mPw') }); J.closeModal(); J.render(); };
 J.act.rmMail = async (el) => { if (confirm('Retirer ce compte ?')) { await J.call('mail.remove', { id: el.dataset.id }); J.render(); } };
 J.act.testMail = (el) => J.busy(el, async () => { const r = await J.call('mail.test', { id: el.dataset.id }); J.toast(r.detail, 'ok'); });
-const msgHtml = (m) => `<div class="card" style="margin-bottom:8px"><div class="row sp"><b>${J.esc(m.subject)}</b>${m.unread ? '<span class="pill gold">non lu</span>' : ''}</div><div class="muted small">${J.esc(m.from)} · ${J.esc(m.date ? J.fmtDate(m.date) : '')}</div><details><summary class="small">Afficher le texte</summary><pre style="white-space:pre-wrap;font:inherit">${J.esc(m.text.slice(0, 4000))}</pre></details></div>`;
-J.act.readMail = (el) => J.busy(el, async () => { const ms = await J.call('mail.read', { id: J.val('mAcc'), limit: Number(J.val('mN')) }); document.getElementById('mOut').innerHTML = ms.map(msgHtml).join('') || '<div class="empty">Boîte vide.</div>'; });
-J.act.sumMail = (el) => J.busy(el, async () => { const r = await J.call('mail.summarize', { id: J.val('mAcc'), limit: Number(J.val('mN')), allowCloud: J.S._env.local ? true : J.val('mCloud') }); document.getElementById('mOut').innerHTML = `<div class="card" style="background:var(--soft)">${J.md(r.summary)}</div>` + r.messages.map(msgHtml).join(''); }, 'Lecture et résumé…');
+const msgHtml = (m, i) => `<div class="card mailcard" id="mc${i}"><div class="row sp"><b>${J.esc(m.subject)}</b>${m.unread ? '<span class="pill gold">non lu</span>' : ''}</div><div class="muted small">${J.esc(m.from)} · ${J.esc(m.date ? J.fmtDate(m.date) : '')}${m.attachments && m.attachments.length ? ' · 📎 ' + J.esc(m.attachments.join(', ')) : ''}</div>
+  <div class="row" style="margin:8px 0"><button class="sm" data-act="mailRead" data-i="${i}">🔊 Lire ce mail</button><button class="sm pri" data-act="mailReply" data-i="${i}">↩ Répondre</button></div>${J.mailBody(m, i)}</div>`;
+const showMails = (ms, head = '') => {
+  J.state.mails = ms;
+  document.getElementById('mOut').innerHTML = (ms.length ? `${head}<div class="row sp" style="margin-bottom:8px"><b>${ms.length} message${ms.length > 1 ? 's' : ''}</b><span class="row"><button class="sm" data-act="mailReadAll">🔊 Lire tous les mails</button><button class="sm ghost" data-act="mailStop">⏹ Arrêter la lecture</button></span></div>` + ms.map(msgHtml).join('') : '<div class="empty">Boîte vide.</div>');
+  J.mountMailFrames(document.getElementById('mOut'));
+};
+J.act.readMail = (el) => J.busy(el, async () => { showMails(await J.call('mail.read', { id: J.val('mAcc'), limit: Number(J.val('mN')) })); });
+J.act.sumMail = (el) => J.busy(el, async () => { const r = await J.call('mail.summarize', { id: J.val('mAcc'), limit: Number(J.val('mN')), allowCloud: J.S._env.local ? true : J.val('mCloud') }); showMails(r.messages, `<div class="card" style="background:var(--soft)">${J.md(r.summary)}</div>`); }, 'Lecture et résumé…');
+J.act.mailRead = (el) => { J.stopReading(); const m = J.state.mails[Number(el.dataset.i)]; J.readMails([m]); };
+J.act.mailReadAll = () => J.readMails(J.state.mails, (i) => { J.$$('.mailcard').forEach((c) => c.classList.toggle('reading', c.id === 'mc' + i)); const c = document.getElementById('mc' + i); if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+J.act.mailStop = () => { J.stopReading(); J.$$('.mailcard').forEach((c) => c.classList.remove('reading')); };
+J.act.mailReply = (el) => J.mailReply(J.state.mails[Number(el.dataset.i)]);
 const buildRaw = async () => J.call('mail.compose', { from: document.getElementById('cAcc').selectedOptions[0].dataset.email, to: J.val('cTo'), cc: J.val('cCc'), subject: J.val('cSub'), body: J.val('cBody') });
 J.act.sendCompose = (el) => J.busy(el, async () => {
   const raw = J.state.loadedEml || await buildRaw(); const r = await J.call('mail.send', { id: J.val('cAcc'), raw });

@@ -2,6 +2,7 @@
 const fs = require('fs');
 const store = require('./store');
 const google = require('./google');
+const mt = require('./mailtext');
 
 const publicAccount = (a) => ({ id: a.id, label: a.label, email: a.email, imapHost: a.imapHost, imapPort: a.imapPort, smtpHost: a.smtpHost, smtpPort: a.smtpPort, type: 'imap' });
 
@@ -58,7 +59,8 @@ async function read(id, limit = 10) {
       const from = Math.max(1, total - limit + 1);
       for await (const msg of c.fetch(`${from}:*`, { uid: true, flags: true, source: { maxLength: 400000 } })) {
         const p = await simpleParser(msg.source);
-        out.push({ id: String(msg.uid), account: id, from: p.from?.text || '', subject: p.subject || '(sans objet)', date: p.date ? p.date.toISOString() : '', unread: !msg.flags.has('\\Seen'), text: (p.text || '').slice(0, 20000), attachments: (p.attachments || []).map((x) => x.filename).filter(Boolean) });
+        out.push(mt.normalize({ id: String(msg.uid), account: id, from: p.from?.text || '', replyTo: p.replyTo?.text || '', to: p.to?.text || '', subject: p.subject || '(sans objet)', date: p.date ? p.date.toISOString() : '', unread: !msg.flags.has('\\Seen'),
+          text: p.text || '', html: typeof p.html === 'string' ? p.html : '', messageId: p.messageId || '', references: Array.isArray(p.references) ? p.references.join(' ') : (p.references || ''), attachments: (p.attachments || []).map((x) => x.filename).filter(Boolean) }));
       }
     } finally { lock.release(); }
   } finally { await c.logout().catch(() => {}); }
@@ -83,9 +85,9 @@ function parseEmlHeaders(raw) {
 }
 const addrs = (s) => (s || '').split(',').map((x) => (x.match(/<([^>]+)>/) || [null, x])[1].trim()).filter((x) => /.+@.+/.test(x));
 
-function buildEml({ from, to, cc, bcc, subject, body }) {
+function buildEml({ from, to, cc, bcc, subject, body, inReplyTo, references }) {
   const enc = (s) => (/^[\x20-\x7e]*$/.test(s) ? s : '=?UTF-8?B?' + Buffer.from(s, 'utf8').toString('base64') + '?=');
-  return [`From: ${from}`, `To: ${to}`, cc ? `Cc: ${cc}` : null, bcc ? `Bcc: ${bcc}` : null, `Subject: ${enc(subject || '')}`, `Date: ${new Date().toUTCString()}`, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', body || ''].filter((x) => x !== null).join('\r\n');
+  return [`From: ${from}`, `To: ${to}`, cc ? `Cc: ${cc}` : null, bcc ? `Bcc: ${bcc}` : null, `Subject: ${enc(subject || '')}`, `Date: ${new Date().toUTCString()}`, inReplyTo ? `In-Reply-To: ${String(inReplyTo).replace(/[\r\n]/g, '')}` : null, references ? `References: ${String(references).replace(/[\r\n]/g, '')}` : null, 'MIME-Version: 1.0', 'Content-Type: text/plain; charset=utf-8', 'Content-Transfer-Encoding: 8bit', '', body || ''].filter((x) => x !== null).join('\r\n');
 }
 
 // Prépare l'envoi : renvoie ce qui sera réellement envoyé (pour la boîte de validation).
@@ -117,4 +119,11 @@ async function send(id, raw, confirmToken, expectedToken) {
 
 function readEmlFile(p) { return fs.readFileSync(p, 'utf8'); }
 
-module.exports = { listAccounts, addAccount, removeAccount, read, testAccount, buildEml, prepareSend, send, readEmlFile };
+// Préremplissage d'une réponse : destinataire, objet, citation, compte d'envoi conseillé.
+function replyPrefill(m) {
+  const accs = listAccounts().filter((a) => a.type === 'imap');
+  const own = accs.find((a) => a.id === m.account) || accs[0];
+  return { ...mt.replyPrefill(m, own?.email), sendAccount: own?.id || '', canSend: accs.length > 0 };
+}
+
+module.exports = { replyPrefill, listAccounts, addAccount, removeAccount, read, testAccount, buildEml, prepareSend, send, readEmlFile };

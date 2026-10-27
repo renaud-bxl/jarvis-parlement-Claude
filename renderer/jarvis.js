@@ -63,6 +63,10 @@
     const out = $('jvOut'); if (!out) return;
     const parts = [];
     if (res.md) parts.push(`<div class="jv-card"><div class="row sp"><b>${J.esc(titleFor(res.intent))}</b><span class="row">${res.readAloud ? `<button class="sm" data-act="jvRead">🔊 Lire le texte</button>` : ''}<button class="sm ghost" data-act="jvCopy">Copier</button></span></div><div id="jvMd">${J.md(res.md)}</div></div>`);
+    if (res.messages && res.messages.length && !res.replyTo) {
+      H.mails = res.messages;
+      parts.push(`<div class="jv-card"><div class="row sp"><b>${res.messages.length} message${res.messages.length > 1 ? 's' : ''}</b><span class="row"><button class="sm" data-act="jvMailAll">🔊 Lire tous</button><button class="sm ghost" data-act="jvMailStop">⏹</button></span></div>` + res.messages.map((m, i) => `<div class="jv-mail" id="jm${i}"><div class="grow"><b>${J.esc(m.subject)}</b>${m.unread ? ' <span class="pill gold">non lu</span>' : ''}<div class="muted small">${J.esc(J.nameOf(m.from))} · ${J.esc(m.date ? J.fmtDate(m.date) : '')}</div><div class="small">${J.esc((m.text || '').replace(/\s+/g, ' ').slice(0, 140))}…</div></div><span class="row"><button class="sm" data-act="jvMailRead" data-i="${i}">🔊 Lire</button><button class="sm" data-act="jvMailShow" data-i="${i}">👁 Afficher</button><button class="sm pri" data-act="jvMailReply" data-i="${i}">↩ Répondre</button></span></div>`).join('') + '</div>');
+    }
     const btns = [];
     if (res.link) btns.push(`<button class="pri sm" data-act="jvGo" data-page="${res.link.page}">${J.esc(res.link.label)} →</button>`);
     if (res.file) btns.push(`<button class="sm" data-act="jvFile" data-p="${J.esc(res.file)}">Afficher le fichier</button>`);
@@ -93,6 +97,8 @@
     if (res.confirm) H.pending = res.confirm;
     showOut(res); setState('idle', '');
     if (res.say) { $('jvSay').textContent = res.say; await say(res.say); }
+    if (res.readAll && onPage()) await J.readMails(res.messages, (i) => { J.$$('.jv-mail').forEach((c) => c.classList.toggle('reading', c.id === 'jm' + i)); });
+    if (res.replyTo && onPage()) { res.end = true; await J.mailReply(res.replyTo, res.replyInstruction); }
     if (res.navigate && onPage()) J.go(res.navigate);
     return res;
   }
@@ -123,7 +129,7 @@
       }
     } finally { H.loop = false; if (onPage() && H.state !== 'speaking' && !H.listening) setState('idle'); }
   }
-  const halt = () => { H.token++; if (H.listening) { H.listening.stop(); H.listening = null; } J.stopSpeak(); H.loop = false; H.state = 'idle'; };
+  const halt = () => { J.stopReading(); H.token++; if (H.listening) { H.listening.stop(); H.listening = null; } J.stopSpeak(); H.loop = false; H.state = 'idle'; };
   J.leave = halt;
 
   // ---------- Page ----------
@@ -179,7 +185,7 @@
   J.act.jvOrb = () => {
     if (H.listening) { H.listening.stop(); return; }
     if (H.state === 'thinking') return;
-    if (J.speaking) { J.stopSpeak(); H.token++; H.loop = false; setState('idle'); }
+    if (J.speaking) { J.stopReading(); H.token++; H.loop = false; setState('idle'); }
     conversation();
   };
   J.act.jvSend = async () => {
@@ -202,6 +208,11 @@
     catch (e) { J.err(e); box.querySelectorAll('button').forEach((b) => { b.disabled = false; }); }
   };
   J.act.jvVoiceLater = () => { store.set('voiceLater', true); $('jvVoice')?.remove(); };
+  J.act.jvMailAll = () => J.readMails(H.mails, (i) => { J.$$('.jv-mail').forEach((c) => c.classList.toggle('reading', c.id === 'jm' + i)); });
+  J.act.jvMailStop = () => { J.stopReading(); J.$$('.jv-mail').forEach((c) => c.classList.remove('reading')); setState('idle'); };
+  J.act.jvMailRead = (el) => { J.stopReading(); J.readMails([H.mails[Number(el.dataset.i)]]); };
+  J.act.jvMailReply = (el) => J.mailReply(H.mails[Number(el.dataset.i)]);
+  J.act.jvMailShow = (el) => { const m = H.mails[Number(el.dataset.i)]; J.modal(`<h2>${J.esc(m.subject)}</h2><div class="muted small">${J.esc(m.from)} · ${J.esc(m.date ? J.fmtDate(m.date) : '')}</div><div class="row" style="margin:10px 0"><button class="sm" data-act="jvMailRead" data-i="${el.dataset.i}">🔊 Lire</button><button class="sm pri" data-act="jvMailReply" data-i="${el.dataset.i}">↩ Répondre</button><button class="sm" data-act="closeModal">Fermer</button></div>${J.mailBody(m, 0)}`); J.mountMailFrames(); };
   J.act.jvSetup = () => J.go('reglages');
   J.act.jvGo = (el) => J.go(el.dataset.page);
   J.act.jvFile = (el) => J.call('app.openPath', { p: el.dataset.p });

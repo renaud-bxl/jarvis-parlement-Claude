@@ -49,3 +49,6 @@
 .jv-voice{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:center;justify-content:center;background:rgba(255,210,31,.12);border:1px solid rgba(255,210,31,.45);border-radius:14px;padding:10px 16px;margin-top:10px;font-size:14px;max-width:760px;text-align:center}
 .jv-voice button{background:var(--jy);border-color:var(--jy);color:#0a1f3f}.jv-voice button.ghost{background:transparent;color:#cfe0ff;border-color:rgba(255,255,255,.25)}
 .compact .jv-voice{display:none}
+.jv-mail{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;padding:10px 0;border-top:1px solid #e3e8f2}
+.jv-mail.reading{background:#fff7d6;box-shadow:-4px 0 0 var(--jy);padding-left:8px}
+.jv-card .muted{color:#566}

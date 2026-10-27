@@ -10,6 +10,8 @@ const google = require('./google');
 const mail = require('./mail');
 const research = require('./research');
 const scheduler = require('./scheduler');
+const mt = require('./mailtext');
+let lastMails = []; // derniers courriels lus (pour « lis le deuxième », « réponds au premier »)
 
 const PAGES = { accueil: 'accueil', dossiers: 'dossiers', recherche: 'recherche', documents: 'documents', 'rédaction': 'redaction', redaction: 'redaction', courriels: 'courriels', mails: 'courriels', agenda: 'agenda', veille: 'veille', cerveau: 'cerveau', 'mémoire': 'cerveau', assistant: 'assistant', réglages: 'reglages', reglages: 'reglages', parlements: 'parlements', diagnostic: 'diagnostic' };
 
@@ -47,7 +49,15 @@ function fastRoute(raw) {
   if (/^(merci|ok merci|super merci|parfait merci|c'est bon|ca ira|rien|stop|annule|laisse tomber|non merci)\W*$/.test(t)) return { intent: 'thanks' };
   if (/^(aide|help|que sais-tu faire|que peux-tu faire|qu'est-ce que tu sais faire|qu'est-ce que tu peux faire)/.test(t)) return { intent: 'help' };
   if (/\b(retiens|souviens-toi|n'oublie pas|rappelle-toi)\b/.test(t)) return { intent: 'remember', args: { text: raw.replace(/^.*?\b(retiens|souviens-toi|n'oublie pas|rappelle-toi)\b( que| de)?/i, '').trim() || raw } };
-  if (/\b(envoie|envoyer|redige|ecris|ecrire|reponds|repondre)\b.*\b(mail|courriel|e-mail|email|message)\b/.test(t)) return { intent: 'mail_compose' };
+  const ORD = { premier: 1, '1er': 1, '1': 1, deuxieme: 2, second: 2, seconde: 2, '2': 2, troisieme: 3, '3': 3, quatrieme: 4, '4': 4, cinquieme: 5, '5': 5, dernier: -1, derniere: -1 };
+  const ord = () => { const m = t.match(/\b(premier|1er|deuxieme|second|seconde|troisieme|quatrieme|cinquieme|dernier|derniere)\b/) || t.match(/\b(?:mail|courriel|message)\s+(?:numero\s+)?([1-9])\b/); return m ? ORD[m[1]] : undefined; };
+  const frm = () => { const m = raw.match(/(?:mail|courriel|message)s?\s+(?:de|du|d'|des)\s+(.+?)(?:\s+(?:et|puis|pour|en)\s|[.?!]*$)/i); return m ? m[1].trim() : undefined; };
+  if (/\b(reponds|repondre|repondez|reponse)\b/.test(t) && /\b(mail|courriel|e-mail|email|message|au premier|au dernier|au deuxieme|a ce)\b/.test(t)) {
+    const ins = raw.match(/(?:en disant(?: que)?|et dis(?: que| lui que| lui)?|pour dire(?: que)?|que)\s+(.+)$/i);
+    return { intent: 'mail_reply', args: { index: ord(), from: frm(), instruction: ins ? ins[1].trim() : '' } };
+  }
+  if (/\b(lis|lire|lit|lisez|lecture)\b/.test(t) && /\b(mails?|courriels?|e-?mails?|messages?)\b/.test(t)) return { intent: 'mails_read', args: { index: ord(), from: frm(), all: /\b(tous|toutes|l'ensemble)\b/.test(t) || (!ord() && !frm()) } };
+  if (/\b(envoie|envoyer|redige|ecris|ecrire)\b.*\b(mail|courriel|e-mail|email|message)\b/.test(t)) return { intent: 'mail_compose' };
   if (/\b(mails?|courriels?|e-?mails?|messagerie|boite de reception|boite mail)\b/.test(t) && /\b(check|checke|verifie|regarde|lis|lire|resume|resumer|nouveau|nouveaux|non lus?|recu|recus|ai-je|j'ai|quoi de neuf)\b/.test(t)) return { intent: 'mails' };
   if (/\b(briefing|point du jour|programme du jour|ma journee|brief)\b/.test(t)) return { intent: 'briefing' };
   if (/\b(agenda|calendrier|rendez-vous|rdv|reunions?)\b/.test(t)) return { intent: 'agenda', args: { days: DAYS(t) } };
@@ -59,7 +69,7 @@ function fastRoute(raw) {
 }
 
 const CATALOG = `Intentions possibles (choisis UNE) :
-- mails : lire/résumer les courriels récents ou non lus.
+- mails : résumer les courriels récents ou non lus. - mails_read {index?, from?, all?} : LIRE À VOIX HAUTE un ou tous les courriels. - mail_reply {index?, from?, instruction?} : répondre à un courriel (index 1 = premier, -1 = dernier).
 - veille_topic {topic} : faire une veille (actualité + agenda parlementaire) sur un sujet précis.
 - veille_run : lancer la veille sur tous les sujets déjà suivis.
 - recherche {query, parlement?} : recherche approfondie sur un projet, un sujet, les antécédents parlementaires.
@@ -116,10 +126,39 @@ const ACTIONS = {
       prompt: use.map((m, i) => `### Message ${i + 1} (${m.account})\nDe: ${m.from}\nObjet: ${m.subject}\nDate: ${m.date}\n${(m.text || '').slice(0, 2000)}`).join('\n\n'),
       json: true, fast: true, maxTokens: 3000,
     });
-    brain.noteUsage('mail-resume');
+    brain.noteUsage('mail-resume'); lastMails = use;
     const d = out.data || {};
     const head = unread.length ? `${unread.length} message${unread.length > 1 ? 's' : ''} non lu${unread.length > 1 ? 's' : ''}` : `Aucun non lu ; voici les ${use.length} derniers messages`;
-    return { say: d.oral || `${head}. Le détail est à l'écran.`, md: `**${head}**\n\n${d.markdown || out.text}${errs.length ? '\n\n_Comptes non lus : ' + errs.join(' ; ') + '_' : ''}`, link: { label: 'Ouvrir les courriels', page: 'courriels' } };
+    return { say: d.oral || `${head}. Le détail est à l'écran.`, md: `**${head}**\n\n${d.markdown || out.text}${errs.length ? '\n\n_Comptes non lus : ' + errs.join(' ; ') + '_' : ''}`, link: { label: 'Ouvrir les courriels', page: 'courriels' }, messages: use, suggest: ['Lis-moi les mails', 'Réponds au premier mail'] };
+  },
+
+  // Récupère les courriels (lecture seule) ; la lecture à voix haute reste locale : aucun envoi au moteur IA.
+  async mails_read({ index, from, all }) {
+    const accs = mail.listAccounts();
+    if (!accs.length) return { say: "Aucun compte courriel n'est encore relié. Je vous ouvre la page Courriels.", navigate: 'courriels' };
+    const msgs = []; const errs = [];
+    for (const a of accs) { try { for (const m of await mail.read(a.id, 10)) msgs.push(m); } catch (e) { errs.push(`${a.email} : ${e.message}`); } }
+    if (!msgs.length) return { say: errs.length ? `Je n'ai pas pu lire vos courriels. ${errs[0]}` : 'Votre boîte est vide.' };
+    msgs.sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const unread = msgs.filter((m) => m.unread); const pool = unread.length ? unread : msgs.slice(0, 5);
+    let pick = pool;
+    if (from) { const f = mt.nameOf(from).toLowerCase(); pick = msgs.filter((m) => (m.from || '').toLowerCase().includes(f)).slice(0, 3); if (!pick.length) return { say: `Je ne trouve aucun mail de ${from}.` }; }
+    else if (index) pick = [index < 0 ? lastMails[lastMails.length - 1] || pool[pool.length - 1] : (lastMails.length ? lastMails : pool)[index - 1]].filter(Boolean);
+    if (!pick.length) return { say: "Je ne trouve pas ce mail. Dites « check mes mails » d'abord." };
+    lastMails = pick.length === 1 && (index || from) ? lastMails : pool;
+    const intro = pick.length === 1 ? 'Je lis ce mail.' : unread.length ? `Je lis vos ${pick.length} nouveaux mails.` : `Vous n'avez pas de nouveau mail. Je lis les ${pick.length} derniers.`;
+    return { say: intro, messages: pick, readAll: true, md: `**${pick.length} message${pick.length > 1 ? 's' : ''}** — lecture à voix haute en cours.`, suggest: ['Réponds au premier mail'] };
+  },
+
+  async mail_reply({ index, from, instruction }) {
+    let msgs = lastMails;
+    if (!msgs.length) { const accs = mail.listAccounts(); for (const a of accs) { try { msgs.push(...await mail.read(a.id, 10)); } catch { /* compte indisponible */ } } msgs.sort((a, b) => String(b.date).localeCompare(String(a.date))); msgs = msgs.filter((m) => m.unread).concat(msgs.filter((m) => !m.unread)).slice(0, 10); lastMails = msgs; }
+    if (!msgs.length) return { say: "Je n'ai aucun mail auquel répondre. Dites « check mes mails » d'abord." };
+    let m;
+    if (from) { const f = mt.nameOf(from).toLowerCase(); m = msgs.find((x) => (x.from || '').toLowerCase().includes(f)); if (!m) return { say: `Je ne trouve aucun mail de ${from}.` }; }
+    else m = index ? (index < 0 ? msgs[msgs.length - 1] : msgs[index - 1]) : msgs[0];
+    if (!m) return { say: "Je ne trouve pas ce mail." };
+    return { say: `Je prépare la réponse à ${mt.nameOf(m.from)}. Relisez-la, rien ne part sans votre validation.`, replyTo: m, replyInstruction: instruction || '', messages: [m] };
   },
 
   async veille_topic({ topic }) {
@@ -248,4 +287,4 @@ function friendlyError(m) {
   return "Je n'ai pas pu terminer : " + m.slice(0, 160);
 }
 
-module.exports = { greeting, command, fastRoute, pickInstrument };
+module.exports = { greeting, command, ACTIONS, fastRoute, pickInstrument };

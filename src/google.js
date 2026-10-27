@@ -102,14 +102,14 @@ async function events(days = 7) {
 }
 
 function decodeBody(payload) {
-  const walk = (p) => {
-    if (p.mimeType === 'text/plain' && p.body?.data) return Buffer.from(p.body.data, 'base64url').toString('utf8');
-    for (const c of p.parts || []) { const t = walk(c); if (t) return t; }
+  const find = (p, type) => {
+    if (p.mimeType === type && p.body?.data) return Buffer.from(p.body.data, 'base64url').toString('utf8');
+    for (const c of p.parts || []) { const t = find(c, type); if (t) return t; }
     return '';
   };
-  let t = walk(payload);
-  if (!t && payload.body?.data) t = Buffer.from(payload.body.data, 'base64url').toString('utf8');
-  return t;
+  let text = find(payload, 'text/plain'), html = find(payload, 'text/html');
+  if (!text && !html && payload.body?.data) { const t = Buffer.from(payload.body.data, 'base64url').toString('utf8'); if (/^\s*</.test(t)) html = t; else text = t; }
+  return { text, html };
 }
 
 async function gmailRead(email, limit = 10, query = 'in:inbox') {
@@ -118,7 +118,9 @@ async function gmailRead(email, limit = 10, query = 'in:inbox') {
   for (const m of list.messages || []) {
     const g = await gget(email, `https://gmail.googleapis.com/gmail/v1/users/me/messages/${m.id}?format=full`);
     const h = Object.fromEntries((g.payload.headers || []).map((x) => [x.name.toLowerCase(), x.value]));
-    out.push({ id: m.id, account: email, from: h.from || '', subject: h.subject || '(sans objet)', date: h.date || '', unread: (g.labelIds || []).includes('UNREAD'), text: decodeBody(g.payload).slice(0, 20000) || g.snippet || '' });
+    const b = decodeBody(g.payload);
+    out.push(require('./mailtext').normalize({ id: m.id, account: 'google:' + email, from: h.from || '', replyTo: h['reply-to'] || '', to: h.to || '', subject: h.subject || '(sans objet)', date: h.date ? new Date(h.date).toISOString() : '', unread: (g.labelIds || []).includes('UNREAD'),
+      text: b.text || (b.html ? '' : (g.snippet || '')), html: b.html, messageId: h['message-id'] || '', references: h.references || '' }));
   }
   return out;
 }

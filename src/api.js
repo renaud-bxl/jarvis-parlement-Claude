@@ -147,6 +147,8 @@ function create(ctx) {
       return { messages: msgs, summary: out.text };
     },
     'mail.compose': (a) => mail.buildEml(a),
+    'mail.reply.prefill': ({ message }) => mail.replyPrefill(message),
+    'mail.reply.draft': (a) => research.replyDraft(a),
     'mail.pickEml': async () => { const f = await pickFile({ properties: ['openFile'], filters: [{ name: 'E-mail', extensions: ['eml', 'txt'] }] }); return f ? { path: f[0], raw: mail.readEmlFile(f[0]) } : null; },
     'mail.saveEml': async ({ raw }) => { const r = await ctx.dialog.showSaveDialog(win(), { defaultPath: 'message.eml' }); if (r.canceled) return null; fs.writeFileSync(r.filePath, raw); return r.filePath; },
     'mail.send': async ({ id, raw }) => {

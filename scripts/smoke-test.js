@@ -77,5 +77,14 @@ const research = require('../src/research'); const mail = require('../src/mail')
   r = await jv.command({ text: 'merci' }); assert(r.end === true); ok('« merci » termine la conversation');
   r = await jv.command({ text: 'retiens que je préfère des questions courtes' }); assert(/noté/.test(r.say)); ok('« retiens que… » alimente le cerveau');
   const vc = require('../src/voice'); assert(vc.VOICES.some((x) => x.gender === 'femme') && vc.VOICES.some((x) => x.gender === 'homme')); assert(vc.status().voices.every((x) => x.installed === false)); ok('voix humaines : femmes et hommes proposés, aucune installée par défaut');
+  // Courriels : HTML → texte, lecture à voix haute, réponse
+  const mtx = require('../src/mailtext');
+  const nm = mtx.normalize({ text: '<!DOCTYPE html><html><head><style>a{}</style></head><body><p>Bonjour &eacute;quipe,</p><p>Voir <a href="https://x.be">ici</a></p></body></html>' });
+  assert(!/<|DOCTYPE/.test(nm.text) && nm.text.includes('Bonjour équipe') && nm.html.includes('<body>')); ok('un courriel HTML ne s\'affiche plus en code : texte propre + HTML conservé pour l\'affichage visuel');
+  const sp = mtx.speakable('Bonjour.\n> cité\nLien https://x.be/abc fin.'); assert(!/https|cité/.test(sp.text)); ok('texte lu à voix haute : sans liens ni citations');
+  const rp = mtx.replyPrefill({ from: 'Jean <j@x.be>', replyTo: 'r@x.be', subject: 'Test', date: '2026-10-27T10:00:00Z', text: 'Salut', messageId: '<1@x>' }); assert(rp.to === 'r@x.be' && rp.subject === 'Re : Test' && rp.quote.includes('> Salut') && rp.inReplyTo === '<1@x>'); ok('réponse : destinataire, objet « Re : », citation, chaînage');
+  const eml = mail.buildEml({ from: 'moi@exemple.be', to: 'j@x.be', subject: 'Re : Test', body: 'ok', inReplyTo: '<1@x>', references: '<1@x>' }); assert(/In-Reply-To: <1@x>/.test(eml) && /References: <1@x>/.test(eml)); ok('le .eml de réponse garde In-Reply-To / References');
+  const jv2 = require('../src/jarvis'); assert.strictEqual(jv2.fastRoute('lis-moi tous les mails').intent, 'mails_read'); assert.strictEqual(jv2.fastRoute('réponds au premier mail en disant que je confirme').args.instruction, 'je confirme'); assert.strictEqual(jv2.fastRoute('lis le deuxième mail').args.index, 2); ok('commandes vocales : « lis tous les mails », « lis le deuxième », « réponds au premier… »');
+  const rd = await research.replyDraft({ message: { from: 'Jean <j@x.be>', subject: 'RDV', text: 'Peux-tu venir ?' }, instruction: 'je confirme', allowCloud: true }); assert(rd.text); ok('réponse proposée par Jarvis');
   console.log('\nTous les tests passent ✅'); fs.rmSync(tmp, { recursive: true, force: true });
 })().catch((e) => { console.error('\n❌ ÉCHEC :', e); process.exit(1); });
