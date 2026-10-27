@@ -45,18 +45,26 @@ J.act.cSend = (el) => J.busy(el, async () => {
 // ---------- RÉGLAGES ----------
 J.pages.reglages = async (root) => {
   await J.refreshMeta(); const s = J.S, p = s.profile, ai = s.ai;
+  const mode = ai.provider === 'openai' ? (/^https:\/\/api\.openai\.com/.test(ai.baseUrl) ? 'openai-cloud' : 'openai') : ai.provider;
   root.innerHTML = `<h1>Réglages</h1><p class="sub">Profil, moteur IA, confidentialité. Données stockées dans <span class="path">${J.esc(s._env.dataDir)}</span></p>
     ${s.firstRunDone ? '' : '<div class="banner"><b>Bienvenue !</b> Renseigne ton profil et ton moteur IA : c\'est tout ce qu\'il faut pour démarrer.</div>'}
     <div class="card"><h2>👤 Profil</h2><div class="grid g3"><div><label class="f">Nom</label><input id="pNom" value="${J.esc(p.nom)}"></div><div><label class="f">Titre</label><input id="pTitre" value="${J.esc(p.titre)}"></div><div><label class="f">Groupe politique</label><input id="pGroupe" value="${J.esc(p.groupe)}"></div>
       <div><label class="f">Parti</label><input id="pParti" value="${J.esc(p.parti)}"></div><div><label class="f">Circonscription</label><input id="pCirc" value="${J.esc(p.circonscription)}"></div><div><label class="f">Langue par défaut</label><select id="pLang"><option value="fr" ${p.langue === 'fr' ? 'selected' : ''}>Français</option><option value="nl" ${p.langue === 'nl' ? 'selected' : ''}>Néerlandais</option><option value="en" ${p.langue === 'en' ? 'selected' : ''}>Anglais</option></select></div></div>
       <label class="f">Signature des textes</label><input id="pSig" value="${J.esc(p.signature)}" placeholder="Prénom Nom, Député bruxellois"><p class="muted small">Parlements actifs : <a href="#parlements">gérer mes parlements →</a></p></div>
     <div class="card"><h2>🤖 Moteur IA</h2>
-      <div class="grid g2"><div><label class="f">Fournisseur</label><select id="aProv"><option value="anthropic" ${ai.provider === 'anthropic' ? 'selected' : ''}>Claude (Anthropic) — recherche web intégrée</option><option value="ollama" ${ai.provider === 'ollama' ? 'selected' : ''}>Ollama — 100 % local</option><option value="openai" ${ai.provider === 'openai' ? 'selected' : ''}>Compatible OpenAI (autre serveur)</option></select></div>
+      <div class="grid g2"><div><label class="f">Fournisseur</label><select id="aProv">
+          <option value="anthropic" ${mode === 'anthropic' ? 'selected' : ''}>Claude (Anthropic) — clé API · recherche web intégrée</option>
+          <option value="openai-cloud" ${mode === 'openai-cloud' ? 'selected' : ''}>OpenAI (GPT) — clé API</option>
+          <option value="ollama" ${mode === 'ollama' ? 'selected' : ''}>Ollama — 100 % local et gratuit</option>
+          <option value="openai" ${mode === 'openai' ? 'selected' : ''}>Autre serveur compatible OpenAI (LM Studio…)</option></select></div>
       <div><label class="f">Recherche web</label><label class="chk"><input type="checkbox" id="aWeb" ${ai.webSearch ? 'checked' : ''}> Autoriser Jarvis à chercher sur le web</label></div></div>
-      <div id="provAnthropic" ${ai.provider === 'anthropic' ? '' : 'hidden'}><div class="grid g3"><div><label class="f">Clé API Anthropic</label><input id="aKey" type="password" placeholder="${s._secrets.anthropic_key ? '•••••• (enregistrée)' : 'sk-ant-…'}"></div><div><label class="f">Modèle principal</label><select id="aModel" data-cur="${J.esc(ai.model)}"><option>${J.esc(ai.model)}</option></select></div><div><label class="f">Modèle rapide (mémoire, tri)</label><select id="aFast" data-cur="${J.esc(ai.fastModel)}"><option>${J.esc(ai.fastModel)}</option></select></div></div><div class="row"><span id="aModelsMsg" class="muted small"></span><button class="sm ghost" data-act="aRefresh">↻ Actualiser la liste</button></div>
-        <p class="muted small">Clé à créer sur <a data-ext="1" href="https://console.anthropic.com/settings/keys">console.anthropic.com</a> (facturation à l'usage, distincte de l'abonnement Claude).</p></div>
-      <div id="provLocal" ${ai.provider === 'anthropic' ? 'hidden' : ''}><div class="grid g3"><div><label class="f">Adresse du serveur</label><input id="aBase" value="${J.esc(ai.baseUrl)}"></div><div><label class="f">Modèle</label><select id="aLocal" data-cur="${J.esc(ai.localModel)}"><option>${J.esc(ai.localModel)}</option></select></div><div><label class="f">Clé (si nécessaire)</label><input id="aKey2" type="password" placeholder="${s._secrets.openai_key ? '•••••• (enregistrée)' : 'optionnel'}"></div></div>
+      <div id="provAnthropic" ${mode === 'anthropic' ? '' : 'hidden'}><div class="grid g3"><div><label class="f">Clé API Anthropic (Claude)</label><input id="aKey" type="password" placeholder="${s._secrets.anthropic_key ? '•••••• (enregistrée)' : 'sk-ant-…'}"></div><div><label class="f">Modèle principal</label><select id="aModel" data-cur="${J.esc(ai.model)}"><option>${J.esc(ai.model)}</option></select></div><div><label class="f">Modèle rapide (mémoire, tri)</label><select id="aFast" data-cur="${J.esc(ai.fastModel)}"><option>${J.esc(ai.fastModel)}</option></select></div></div>
+        <p class="muted small">Clé à créer sur <a data-ext="1" href="https://console.anthropic.com/settings/keys">console.anthropic.com</a> (facturation à l'usage, distincte de l'abonnement Claude). Les modèles apparaissent dès que la clé est saisie.</p></div>
+      <div id="provOpenAI" ${mode === 'openai-cloud' ? '' : 'hidden'}><div class="grid g3"><div><label class="f">Clé API OpenAI</label><input id="aKeyO" type="password" placeholder="${s._secrets.openai_key ? '•••••• (enregistrée)' : 'sk-…'}"></div><div><label class="f">Modèle principal</label><select id="aOModel" data-cur="${J.esc(ai.localModel)}"><option>${J.esc(ai.localModel)}</option></select></div><div><label class="f">Modèle rapide (mémoire, tri)</label><select id="aOFast" data-cur="${J.esc(ai.fastLocalModel || '')}"><option>${J.esc(ai.fastLocalModel || '')}</option></select></div></div>
+        <p class="muted small">Clé à créer sur <a data-ext="1" href="https://platform.openai.com/api-keys">platform.openai.com/api-keys</a> (facturation à l'usage, distincte de l'abonnement ChatGPT). Les modèles apparaissent dès que la clé est saisie. La recherche web passe par DuckDuckGo avec ce fournisseur.</p></div>
+      <div id="provLocal" ${mode === 'ollama' || mode === 'openai' ? '' : 'hidden'}><div class="grid g3"><div><label class="f">Adresse du serveur</label><input id="aBase" value="${J.esc(ai.baseUrl)}"></div><div><label class="f">Modèle</label><select id="aLocal" data-cur="${J.esc(ai.localModel)}"><option>${J.esc(ai.localModel)}</option></select></div><div><label class="f">Clé (si nécessaire)</label><input id="aKey2" type="password" placeholder="${s._secrets.compat_key ? '•••••• (enregistrée)' : 'optionnel'}"></div></div>
         <p class="muted small" id="aLocalMsg" style="color:var(--warn)"></p><p class="muted small">Ollama : installe-le depuis <a data-ext="1" href="https://ollama.com">ollama.com</a> puis <code>ollama pull mistral</code>. Avec un moteur local, tes documents ne quittent jamais ton Mac.</p></div>
+      <div class="row" style="margin-top:10px"><span id="aModelsMsg" class="muted small"></span><button class="sm ghost" data-act="aRefresh">↻ Actualiser la liste des modèles</button></div>
       <div class="row" style="margin-top:10px"><button class="pri" data-act="saveSettings">Enregistrer</button><button data-act="testAI">Tester le moteur</button></div></div>
     <div class="card"><h2>🎙️ Voix</h2>
       <p class="muted small"><b>Parler</b> : voix humaines françaises open source (modèles <a data-ext="1" href="https://github.com/rhasspy/piper">Piper</a>), gratuites et 100 % hors-ligne : deux voix de femme, deux voix d'homme. Choisis la tienne ci-dessous. <b>Écouter</b> : reconnaissance vocale de macOS, gratuite et intégrée (rien à configurer). Whisper reste possible en option ci-dessous.</p>
@@ -70,22 +78,26 @@ J.pages.reglages = async (root) => {
       <p class="muted small">Les clés et mots de passe sont chiffrés par le trousseau macOS ${s._env.encrypted ? '(actif ✓)' : '(indisponible ✗)'}. Aucune télémétrie.</p></div>`;
   const fillVoices = () => { const vs = J.voices(); document.getElementById('vVoice').innerHTML = vs.length ? vs.map((v) => `<option value="${J.esc(v.name)}" ${v.name === s.voice.ttsVoice ? 'selected' : ''}>${J.esc(v.name)} (${v.lang})</option>`).join('') : '<option value="">Voix par défaut</option>'; };
   J.drawPiper(); fillVoices(); if (window.speechSynthesis) speechSynthesis.onvoiceschanged = fillVoices;
-  document.getElementById('aProv').addEventListener('change', (e) => { document.getElementById('provAnthropic').hidden = e.target.value !== 'anthropic'; document.getElementById('provLocal').hidden = e.target.value === 'anthropic'; if (e.target.value === 'ollama') document.getElementById('aBase').value = 'http://localhost:11434/v1'; J.loadModels(); });
-  ['aKey', 'aKey2', 'aBase'].forEach((id) => document.getElementById(id)?.addEventListener('change', () => J.loadModels()));
+  document.getElementById('aProv').addEventListener('change', (e) => {
+    const v = e.target.value; document.getElementById('provAnthropic').hidden = v !== 'anthropic'; document.getElementById('provOpenAI').hidden = v !== 'openai-cloud'; document.getElementById('provLocal').hidden = !(v === 'ollama' || v === 'openai');
+    if (v === 'ollama') document.getElementById('aBase').value = 'http://localhost:11434/v1'; if (v === 'openai' && /api\.openai\.com|11434/.test(J.val('aBase'))) document.getElementById('aBase').value = 'http://localhost:1234/v1';
+    J.loadModels();
+  });
+  ['aKey', 'aKeyO', 'aKey2', 'aBase'].forEach((id) => document.getElementById(id)?.addEventListener('change', () => J.loadModels()));
   J.loadModels();
 };
 // Remplit automatiquement les listes de modèles selon le fournisseur (et la clé / l'adresse saisies).
 J.loadModels = async () => {
-  const prov = J.val('aProv'); const anth = prov === 'anthropic';
-  const ids = anth ? ['aModel', 'aFast'] : ['aLocal']; const msg = document.getElementById('aModelsMsg');
-  if (anth && msg) msg.textContent = 'Recherche des modèles…';
-  const r = await J.call('ai.models', { provider: prov, baseUrl: J.val('aBase'), key: (anth ? J.val('aKey') : J.val('aKey2')) || undefined });
+  const v = J.val('aProv'); const cfg = { anthropic: { ids: ['aModel', 'aFast'], key: 'aKey', prov: 'anthropic' }, 'openai-cloud': { ids: ['aOModel', 'aOFast'], key: 'aKeyO', prov: 'openai', base: 'https://api.openai.com/v1' }, ollama: { ids: ['aLocal'], key: 'aKey2', prov: 'ollama' }, openai: { ids: ['aLocal'], key: 'aKey2', prov: 'openai' } }[v];
+  const msg = document.getElementById('aModelsMsg'); if (msg) msg.textContent = 'Recherche des modèles…';
+  const r = await J.call('ai.models', { provider: cfg.prov, baseUrl: cfg.base || J.val('aBase'), key: J.val(cfg.key) || undefined });
   const list = r.models || [];
-  for (const id of ids) {
+  for (const id of cfg.ids) {
     const el = document.getElementById(id); if (!el) continue; const cur = el.dataset.cur || el.value;
-    if (!list.length) { el.outerHTML = `<input id="${id}" data-cur="${J.esc(cur)}" value="${J.esc(cur)}" placeholder="nom du modèle">`; continue; }
-    const pref = id === 'aFast' ? (list.find((m) => /haiku/i.test(m.id)) || {}).id : (list.find((m) => /sonnet/i.test(m.id)) || {}).id;
-    const keep = list.some((m) => m.id === cur); const sel = keep ? cur : (pref || list[0].id);
+    if (!list.length) { const keep = v === 'openai-cloud' && !/^(gpt|o\d|chatgpt)/.test(cur) ? '' : cur; el.outerHTML = `<input id="${id}" data-cur="${J.esc(keep)}" value="${J.esc(keep)}" placeholder="${v === 'openai-cloud' ? 'ex. gpt-5' : 'nom du modèle'}">`; continue; }
+    const fastish = /Fast$/.test(id); const pick = (re) => (list.find((m) => re.test(m.id)) || {}).id;
+    const pref = fastish ? pick(/haiku|nano|mini/i) : (v === 'anthropic' ? pick(/sonnet/i) : v === 'openai-cloud' ? (pick(/^gpt-\d+(\.\d+)?$/) || pick(/^gpt-/)) : undefined);
+    const sel = list.some((m) => m.id === cur) ? cur : (pref || list[0].id);
     const html = list.map((m) => `<option value="${J.esc(m.id)}" ${m.id === sel ? 'selected' : ''}>${J.esc(m.label)}${m.label !== m.id ? ' — ' + J.esc(m.id) : ''}</option>`).join('');
     if (el.tagName === 'SELECT') el.innerHTML = html; else el.outerHTML = `<select id="${id}" data-cur="${J.esc(cur)}">${html}</select>`;
   }
@@ -94,11 +106,12 @@ J.loadModels = async () => {
 };
 J.act.aRefresh = () => J.loadModels();
 J.act.saveSettings = (el) => J.busy(el, async () => {
-  const prov = J.val('aProv');
-  await J.call('settings.set', { profile: { nom: J.val('pNom'), titre: J.val('pTitre'), groupe: J.val('pGroupe'), parti: J.val('pParti'), circonscription: J.val('pCirc'), langue: J.val('pLang'), signature: J.val('pSig') },
-    ai: { provider: prov, webSearch: J.val('aWeb'), ...(prov === 'anthropic' ? { model: J.val('aModel') || 'claude-sonnet-5-5', fastModel: J.val('aFast') || 'claude-haiku-5-5' } : { baseUrl: J.val('aBase'), localModel: J.val('aLocal') }) } });
-  const k = prov === 'anthropic' ? J.val('aKey') : J.val('aKey2');
-  if (k && k.trim()) await J.call('secret.set', { name: prov === 'anthropic' ? 'anthropic_key' : 'openai_key', value: k.trim() });
+  const v = J.val('aProv'); let ai = { webSearch: J.val('aWeb') }; let keyField = null, keyName = null;
+  if (v === 'anthropic') { ai = { ...ai, provider: 'anthropic', model: J.val('aModel') || 'claude-sonnet-5-5', fastModel: J.val('aFast') || 'claude-haiku-5-5' }; keyField = 'aKey'; keyName = 'anthropic_key'; }
+  else if (v === 'openai-cloud') { ai = { ...ai, provider: 'openai', baseUrl: 'https://api.openai.com/v1', localModel: J.val('aOModel'), fastLocalModel: J.val('aOFast') }; keyField = 'aKeyO'; keyName = 'openai_key'; }
+  else { ai = { ...ai, provider: v, baseUrl: J.val('aBase'), localModel: J.val('aLocal'), fastLocalModel: '' }; keyField = 'aKey2'; keyName = 'compat_key'; }
+  const k = (J.val(keyField) || '').trim(); if (k) await J.call('secret.set', { name: keyName, value: k });
+  await J.call('settings.set', { profile: { nom: J.val('pNom'), titre: J.val('pTitre'), groupe: J.val('pGroupe'), parti: J.val('pParti'), circonscription: J.val('pCirc'), langue: J.val('pLang'), signature: J.val('pSig') }, ai });
   await J.refreshMeta(); J.drawChrome(); J.toast('Réglages enregistrés', 'ok'); J.render();
 });
 J.act.testAI = (el) => J.busy(el, async () => { const r = await J.call('ai.test'); J.toast(`Moteur OK : ${r.model} (${r.ms} ms)`, 'ok'); }, 'Test…');

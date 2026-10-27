@@ -16,7 +16,7 @@ const DOCS_DEFAULT = process.env.JARVIS_DOCS_DIR || path.join(os.homedir(), 'Doc
 
 const DEFAULT_SETTINGS = {
   profile: { nom: '', titre: 'Député(e)', groupe: '', parti: '', circonscription: '', parlements: ['bxl-pb'], parlementActif: 'bxl-pb', langue: 'fr', signature: '' },
-  ai: { provider: 'anthropic', model: 'claude-sonnet-5-5', fastModel: 'claude-haiku-5-5', baseUrl: 'http://localhost:11434/v1', localModel: '', webSearch: true },
+  ai: { provider: 'anthropic', model: 'claude-sonnet-5-5', fastModel: 'claude-haiku-5-5', baseUrl: 'http://localhost:11434/v1', localModel: '', fastLocalModel: '', webSearch: true },
   docs: { folders: [DOCS_DEFAULT] },
   veille: { enabled: false, time: '07:30', days: [1, 2, 3, 4, 5], topics: [], lastRun: null },
   google: { clientId: '', accounts: [] },

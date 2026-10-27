@@ -66,6 +66,19 @@ const research = require('../src/research'); const mail = require('../src/mail')
   assert.throws(() => mail.prepareSend('imap_moi_exemple_be', raw.replace('moi@exemple.be', 'autre@x.be')), /ne correspond pas/); ok('From usurpé refusé');
   await assert.rejects(() => mail.send('imap_moi_exemple_be', raw, 'a', 'b'), /non confirmé/); ok('envoi sans confirmation refusé');
 
+  // Moteurs : OpenAI (clé API) et séparation des clés
+  const realFetch = global.fetch; let seen = null;
+  global.fetch = async (url, opts) => { seen = { url: String(url), headers: opts && opts.headers, body: opts && opts.body ? JSON.parse(opts.body) : null };
+    if (/\/models/.test(String(url))) return { ok: true, status: 200, text: async () => JSON.stringify({ data: [{ id: 'gpt-5' }, { id: 'gpt-5-mini' }, { id: 'text-embedding-3-large' }, { id: 'whisper-1' }, { id: 'o3' }] }) };
+    return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: 'OK' } }] }) }; };
+  store.setSecret('openai_key', 'sk-openai'); store.setSecret('compat_key', 'sk-autre');
+  store.settings.set({ ai: { provider: 'openai', baseUrl: 'https://api.openai.com/v1', localModel: 'gpt-5', fastLocalModel: 'gpt-5-mini' } });
+  assert(llm.configured() && !llm.isLocal());
+  await llm.complete({ system: 's', prompt: 'p', fast: true, maxTokens: 50 }); assert(seen.url.startsWith('https://api.openai.com/v1/chat/completions') && seen.headers.authorization === 'Bearer sk-openai' && seen.body.model === 'gpt-5-mini' && seen.body.max_completion_tokens >= 1000 && !('max_tokens' in seen.body)); ok('OpenAI (clé API) : bon point d\'accès, bon modèle rapide, bonne clé');
+  const ml = await llm.listModels({ provider: 'openai', baseUrl: 'https://api.openai.com/v1' }); assert.deepStrictEqual(ml.models.map((m) => m.id), ['o3', 'gpt-5-mini', 'gpt-5']); ok('liste des modèles OpenAI : uniquement les modèles de discussion');
+  store.settings.set({ ai: { provider: 'openai', baseUrl: 'http://localhost:1234/v1', localModel: 'local', fastLocalModel: '' } });
+  await llm.complete({ system: 's', prompt: 'p', maxTokens: 50 }); assert.strictEqual(seen.headers.authorization, 'Bearer sk-autre'); assert(!JSON.stringify(seen.headers).includes('sk-openai')); ok('la clé OpenAI ne part jamais vers un autre serveur');
+  global.fetch = realFetch; store.settings.set({ ai: { provider: 'anthropic' } });
   // Jarvis conversationnel
   const jv = require('../src/jarvis');
   const g = jv.greeting(); assert(g.intro.startsWith('Bonjour') && g.intro.includes("Que puis-je faire pour vous aujourd'hui ?") && /checker vos mails/.test(g.offer) && /veille/.test(g.offer)); ok('salutation : Bonjour + question + capacités');

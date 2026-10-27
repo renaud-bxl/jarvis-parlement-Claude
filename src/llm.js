@@ -13,10 +13,15 @@ function isLocal(ai = cfg()) {
   return false;
 }
 
+function isOpenAICloud(ai = cfg()) {
+  try { return ai.provider === 'openai' && new URL(ai.baseUrl).hostname === 'api.openai.com'; } catch { return false; }
+}
+
 function configured() {
   const ai = cfg();
   if (ai.provider === 'anthropic') return store.hasSecret('anthropic_key');
   if (ai.provider === 'ollama') return !!ai.localModel;
+  if (isOpenAICloud(ai)) return store.hasSecret('openai_key') && !!ai.localModel;
   return !!ai.baseUrl && !!ai.localModel;
 }
 
@@ -74,14 +79,16 @@ async function anthropic({ system, messages, web, fast, maxTokens }) {
 async function openaiLike({ system, messages, fast, maxTokens }) {
   const ai = cfg();
   const base = (ai.provider === 'ollama' ? (ai.baseUrl || 'http://localhost:11434/v1') : ai.baseUrl).replace(/\/$/, '');
-  const key = store.getSecret('openai_key');
-  const model = ai.localModel;
+  const cloud = isOpenAICloud(ai);
+  const key = store.getSecret(cloud ? 'openai_key' : 'compat_key'); // la clé OpenAI ne part jamais vers un autre serveur
+  const model = (fast && ai.fastLocalModel) ? ai.fastLocalModel : ai.localModel;
   if (!model) throw new Error('Aucun modèle choisi. Ouvre Réglages › Moteur IA.');
+  if (cloud && !key) throw new Error("Aucune clé OpenAI enregistrée. Ouvre Réglages › Moteur IA.");
   const json = await httpJson(`${base}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) },
-    body: JSON.stringify({ model, max_tokens: maxTokens, messages: [{ role: 'system', content: system || '' }, ...messages.map((m) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }))] }),
-  }, 'Moteur local');
+    body: JSON.stringify({ model, ...(cloud ? { max_completion_tokens: Math.max(maxTokens || 1000, 1000) } : { max_tokens: maxTokens }), messages: [{ role: 'system', content: system || '' }, ...messages.map((m) => ({ role: m.role, content: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }))] }),
+  }, cloud ? 'OpenAI' : 'Moteur local');
   return { text: (json.choices?.[0]?.message?.content || '').trim(), sources: [], model };
 }
 
@@ -168,10 +175,13 @@ async function listModels({ provider, baseUrl, key } = {}) {
       const ms = (j.models || []).map((m) => ({ id: m.name, label: m.name }));
       return ms.length ? { models: ms } : { models: [], error: "Ollama répond mais aucun modèle n'est installé : lance « ollama pull mistral »." };
     }
-    const k = key || store.getSecret('openai_key');
+    const k = key || store.getSecret(/^https:\/\/api\.openai\.com/.test(base) ? 'openai_key' : 'compat_key');
+    if (!k && /^https:\/\/api\.openai\.com/.test(base)) return { models: [], error: 'Entre ta clé API OpenAI pour voir les modèles disponibles.' };
     const j = await httpJson(base + '/models', { headers: k ? { authorization: 'Bearer ' + k } : {}, signal: AbortSignal.timeout(8000) }, 'Serveur');
-    return { models: (j.data || j.models || []).map((m) => ({ id: m.id || m.name, label: m.id || m.name })).filter((m) => m.id) };
+    let ms = (j.data || j.models || []).map((m) => ({ id: m.id || m.name, label: m.id || m.name })).filter((m) => m.id);
+    if (/^https:\/\/api\.openai\.com/.test(base)) ms = ms.filter((m) => /^(gpt-|o\d|chatgpt-)/.test(m.id) && !/(embedding|whisper|tts|dall-e|image|audio|realtime|transcribe|moderation|search|instruct|codex|vision-preview|\d{4}-\d{2}-\d{2}$)/.test(m.id)).sort((a, b) => b.id.localeCompare(a.id));
+    return { models: ms };
   } catch (e) { return { models: [], error: prov === 'ollama' ? "Ollama ne répond pas : est-il lancé ? (ollama.com)" : e.message }; }
 }
 
-module.exports = { complete, ping, isLocal, configured, parseJson, listLocalModels, listModels };
+module.exports = { isOpenAICloud, complete, ping, isLocal, configured, parseJson, listLocalModels, listModels };

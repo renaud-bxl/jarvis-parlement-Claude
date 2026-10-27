@@ -15,7 +15,7 @@ const scheduler = require('./scheduler');
 const diag = require('./diag');
 const workspace = require('./workspace');
 
-const SECRETS = new Set(['anthropic_key', 'openai_key', 'google_client_secret', 'stt_key']);
+const SECRETS = new Set(['anthropic_key', 'openai_key', 'compat_key', 'google_client_secret', 'stt_key']);
 const voice = require('./voice');
 const jarvis = require('./jarvis');
 
@@ -28,7 +28,7 @@ function create(ctx) {
     // ---- Réglages ----
     'settings.get': () => {
       const s = store.settings.get();
-      return { ...s, _secrets: { anthropic_key: store.hasSecret('anthropic_key'), openai_key: store.hasSecret('openai_key'), google_client_secret: store.hasSecret('google_client_secret'), stt_key: store.hasSecret('stt_key') },
+      return { ...s, _secrets: { anthropic_key: store.hasSecret('anthropic_key'), openai_key: store.hasSecret('openai_key'), compat_key: store.hasSecret('compat_key'), google_client_secret: store.hasSecret('google_client_secret'), stt_key: store.hasSecret('stt_key') },
         _env: { piperReady: voice.piperReady(), sttReady: voice.configured(), sttEngine: voice.engine(), local: llm.isLocal(), configured: llm.configured(), dataDir: store.DIR, encrypted: store.canEncrypt() } };
     },
     'settings.set': (patch) => { store.settings.set(patch); store.settings.set({ firstRunDone: true }); workspace.ensureAll(); return true; },
