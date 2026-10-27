@@ -1,0 +1,41 @@
+{
+  "name": "jarvis-parlement",
+  "productName": "Jarvis Parlement",
+  "version": "1.0.0",
+  "description": "Assistant parlementaire complet : veille, recherche, rédaction, courriels, agenda — avec un cerveau qui apprend vos préférences.",
+  "main": "main.js",
+  "author": "Jarvis Parlement",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "test": "node scripts/smoke-test.js",
+    "icon": "node scripts/make-icon.js",
+    "dist": "electron-builder --mac --publish never"
+  },
+  "dependencies": {
+    "imapflow": "^1.0.0",
+    "mailparser": "^3.7.0",
+    "mammoth": "^1.8.0",
+    "nodemailer": "^7.0.0",
+    "pdf-parse": "1.1.1"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "be.jarvis.parlement",
+    "productName": "Jarvis Parlement",
+    "artifactName": "Jarvis-Parlement-${version}-${arch}.${ext}",
+    "files": ["main.js", "preload.js", "src/**/*", "renderer/**/*", "build/icon.png", "package.json"],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [{ "target": "dmg", "arch": ["arm64", "x64"] }, { "target": "zip", "arch": ["arm64", "x64"] }],
+      "icon": "build/icon.icns",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "extendInfo": { "NSMicrophoneUsageDescription": "Jarvis utilise le micro pour la dictée vocale de tes demandes.", "NSCalendarsUsageDescription": "Jarvis peut lire ton agenda." }
+    },
+    "dmg": { "title": "Jarvis Parlement", "contents": [{ "x": 140, "y": 190 }, { "x": 400, "y": 190, "type": "link", "path": "/Applications" }] }
+  }
+}
