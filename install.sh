@@ -25,13 +25,13 @@ trap cleanup EXIT
 say "Téléchargement : ${URL##*/}"
 curl -fL --progress-bar -o "$TMP/jarvis.dmg" "$URL"
 
-say "Installation dans $DEST…"
+say "Installation dans ${DEST}…"
 hdiutil attach "$TMP/jarvis.dmg" -nobrowse -quiet -mountpoint "$MNT"
-pgrep -x "$APP" >/dev/null && { say "Fermeture de $APP…"; osascript -e "tell application \"$APP\" to quit" || true; sleep 2; }
+pgrep -x "$APP" >/dev/null && { say "Fermeture de ${APP}…"; osascript -e "tell application \"$APP\" to quit" || true; sleep 2; }
 rm -rf "$DEST/$APP.app"
 cp -R "$MNT/$APP.app" "$DEST/"
 # L'app n'est pas notarisée par Apple : on retire la mise en quarantaine du téléchargement pour qu'elle s'ouvre directement.
 xattr -dr com.apple.quarantine "$DEST/$APP.app" 2>/dev/null || true
 
-say "Terminé ✅  Lancement de $APP…"
+say "Terminé ✅  Lancement de ${APP}…"
 open "$DEST/$APP.app"
