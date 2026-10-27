@@ -1,6 +1,6 @@
 // Routeur et démarrage.
 const NAV = [
-  ['accueil', 'Accueil', 'home'], ['dossiers', 'Dossiers', 'folder'], ['recherche', 'Recherche', 'search'], ['redaction', 'Rédiger', 'pen'],
+  ['accueil', 'Jarvis', 'orb'], ['tableau', 'Tableau de bord', 'home'], ['dossiers', 'Dossiers', 'folder'], ['recherche', 'Recherche', 'search'], ['redaction', 'Rédiger', 'pen'],
   ['documents', 'Documents', 'file'], ['courriels', 'Courriels', 'mail'], ['agenda', 'Agenda', 'cal'], ['veille', 'Veille', 'eye'], ['assistant', 'Assistant', 'chat'],
   'sep', ['parlements', 'Parlements', 'bank'], ['cerveau', 'Cerveau', 'brain'], ['reglages', 'Réglages', 'gear'], ['diagnostic', 'Diagnostic', 'pulse'],
 ];
@@ -9,6 +9,7 @@ J.go = (page, arg) => { location.hash = '#' + page + (arg ? '/' + arg : ''); };
 
 async function render() {
   const [page, arg] = (location.hash.slice(1) || 'accueil').split('/');
+  if (J.leave) J.leave();
   const fn = J.pages[page] || J.pages.accueil;
   J.$$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === page));
   const root = document.getElementById('view');

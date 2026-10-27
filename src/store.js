@@ -22,7 +22,8 @@ const DEFAULT_SETTINGS = {
   google: { clientId: '', accounts: [] },
   mail: { accounts: [], briefingIncludesMail: false },
   brain: { learning: true },
-  voice: { engine: 'system', piperVoice: 'siwis', ttsVoice: '', ttsRate: 1, autoSpeak: false, sttUrl: 'https://api.openai.com/v1', sttModel: 'whisper-1' },
+  voice: { engine: 'system', piperVoice: 'siwis', ttsVoice: '', ttsRate: 1, autoSpeak: false, stt: 'macos', sttUrl: 'https://api.openai.com/v1', sttModel: 'whisper-1' },
+  jarvis: { cloudMailOk: false, converse: false },
   firstRunDone: false,
 };
 

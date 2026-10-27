@@ -12,6 +12,14 @@ curl -fsSL https://raw.githubusercontent.com/renaud-bxl/jarvis-parlement-Claude/
 
 Ou manuellement : télécharger le `.dmg` dans l'onglet **Releases** (`arm64` pour les Mac Apple Silicon, `x64` pour les Mac Intel), glisser l'app dans *Applications*, puis clic droit › Ouvrir la première fois (l'app n'est pas notarisée par Apple).
 
+## Parler à Jarvis
+
+À l'ouverture, Jarvis te salue à voix haute (« Bonjour », ton nom, « Que puis-je faire pour vous aujourd'hui ? ») et énumère ce qu'il sait faire. Touche l'orbe (ou le micro) et parle : « check mes mails », « fais une veille sur la ZBE », « rédige une question sur le tram 10 », « qu'est-ce que j'ai à l'agenda demain ? ». Il comprend, agit, te répond à voix haute et affiche le détail. En mode « conversation continue », il t'écoute à nouveau après chaque réponse ; « merci » met fin à l'échange.
+
+- **Écoute** : reconnaissance vocale de macOS (gratuite, sans clé, autorisation « Reconnaissance vocale » + « Micro » demandée au premier usage). Whisper reste disponible en option.
+- **Voix** : Piper (open source) ou voix macOS.
+- Jarvis n'envoie jamais un courriel et ne dépose jamais rien sans ta validation ; pour résumer tes courriels avec un moteur en ligne, il te demande d'abord ton accord.
+
 ## Ce que fait Jarvis
 
 | | Fonction |

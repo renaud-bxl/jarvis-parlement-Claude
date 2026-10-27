@@ -17,6 +17,7 @@ const workspace = require('./workspace');
 
 const SECRETS = new Set(['anthropic_key', 'openai_key', 'google_client_secret', 'stt_key']);
 const voice = require('./voice');
+const jarvis = require('./jarvis');
 
 function create(ctx) {
   // ctx : { dialog, shell, app, getWindow, emit }
@@ -28,7 +29,7 @@ function create(ctx) {
     'settings.get': () => {
       const s = store.settings.get();
       return { ...s, _secrets: { anthropic_key: store.hasSecret('anthropic_key'), openai_key: store.hasSecret('openai_key'), google_client_secret: store.hasSecret('google_client_secret'), stt_key: store.hasSecret('stt_key') },
-        _env: { sttReady: voice.configured(), local: llm.isLocal(), configured: llm.configured(), dataDir: store.DIR, encrypted: store.canEncrypt() } };
+        _env: { sttReady: voice.configured(), sttEngine: voice.engine(), local: llm.isLocal(), configured: llm.configured(), dataDir: store.DIR, encrypted: store.canEncrypt() } };
     },
     'settings.set': (patch) => { store.settings.set(patch); store.settings.set({ firstRunDone: true }); workspace.ensureAll(); return true; },
     // ---- Parlements multiples ----
@@ -126,6 +127,8 @@ function create(ctx) {
     // ---- Rédaction / assistant ----
     'draft.run': (a) => research.draft(a),
     'chat.send': (a) => research.chat(a),
+    'jarvis.greeting': () => jarvis.greeting(),
+    'jarvis.command': (a) => jarvis.command(a),
 
     // ---- Courriels ----
     'mail.accounts': () => mail.listAccounts(),

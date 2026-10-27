@@ -87,20 +87,41 @@ function synth(text) {
 }
 
 // ---- Écoute (transcription) ----
-function sttConfigured() {
+// Moteur 1 (par défaut) : reconnaissance vocale de macOS via l'assistant « jarvis-listen » — gratuit, sans clé, sur l'appareil quand c'est possible.
+// Moteur 2 : Whisper via une API compatible OpenAI (OpenAI, ou serveur local open source type whisper.cpp).
+const listenBin = () => [
+  process.resourcesPath && path.join(process.resourcesPath, 'jarvis-listen'),
+  path.join(__dirname, '..', 'native', 'build', 'jarvis-listen'),
+].filter(Boolean).find((p) => fs.existsSync(p));
+const macosReady = () => process.platform === 'darwin' && !!listenBin();
+function whisperConfigured() {
   const v = store.settings.get().voice;
   if (!v.sttUrl) return false;
   try { const h = new URL(v.sttUrl).hostname; if (['localhost', '127.0.0.1', '::1'].includes(h)) return true; } catch { return false; }
   return store.hasSecret('stt_key');
 }
-const configured = sttConfigured;
+const engine = () => { const v = store.settings.get().voice; return v.stt === 'whisper' ? (whisperConfigured() ? 'whisper' : null) : (macosReady() ? 'macos' : (whisperConfigured() ? 'whisper' : null)); };
+const configured = () => !!engine();
+
+function transcribeMacos(buf, lang) {
+  const f = path.join(os.tmpdir(), `jarvis-stt-${process.pid}-${Date.now()}.wav`); fs.writeFileSync(f, buf);
+  return new Promise((resolve, reject) => {
+    execFile(listenBin(), [f, lang === 'nl' ? 'nl-BE' : lang === 'en' ? 'en-GB' : 'fr-FR'], { timeout: 95000 }, (e, so, se) => {
+      fs.rmSync(f, { force: true });
+      if (e) { const m = String(se || e.message); if (/AUTORISATION_REFUSEE/.test(m)) return reject(new Error('Reconnaissance vocale refusée : autorise Jarvis Parlement dans Réglages Système › Confidentialité › Reconnaissance vocale.')); return reject(new Error(m.replace(/^\w+ : /, '').trim().slice(0, 200) || 'Reconnaissance vocale impossible.')); }
+      resolve({ text: String(so).trim() });
+    });
+  });
+}
 
 async function transcribe({ audio, mime }) {
   const v = store.settings.get().voice; const st = store.settings.get();
-  if (!sttConfigured()) throw new Error("Transcription vocale non configurée (Réglages › Voix). En attendant, utilise la dictée macOS : appuie deux fois sur Fn dans n'importe quel champ.");
+  const eng = engine();
+  if (!eng) throw new Error("Aucune reconnaissance vocale disponible (Réglages › Voix). En attendant, utilise la dictée macOS : appuie deux fois sur Fn.");
   const buf = Buffer.from(audio, 'base64');
   if (buf.length < 1500) throw new Error('Enregistrement trop court.');
-  const ext = /mp4|m4a/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : 'webm';
+  if (eng === 'macos') return transcribeMacos(buf, st.profile.langue);
+  const ext = /wav/.test(mime) ? 'wav' : /mp4|m4a/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : 'webm';
   const form = new FormData();
   form.append('file', new Blob([buf], { type: mime || 'audio/webm' }), `voix.${ext}`);
   form.append('model', v.sttModel || 'whisper-1'); form.append('language', st.profile.langue || 'fr'); form.append('response_format', 'json');
@@ -112,4 +133,4 @@ async function transcribe({ audio, mime }) {
   return { text: (j?.text ?? txt).trim() };
 }
 
-module.exports = { VOICES, status, install, removeVoice, synth, configured, transcribe };
+module.exports = { VOICES, status, install, removeVoice, synth, configured, engine, macosReady, transcribe };

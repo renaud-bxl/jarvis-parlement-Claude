@@ -65,5 +65,16 @@ const research = require('../src/research'); const mail = require('../src/mail')
   const prep = mail.prepareSend('imap_moi_exemple_be', raw); assert.deepStrictEqual(prep.to, ['min@gov.be']); assert.deepStrictEqual(prep.bcc, ['x@y.be']); ok('préparation d\'envoi : destinataires complets affichés');
   assert.throws(() => mail.prepareSend('imap_moi_exemple_be', raw.replace('moi@exemple.be', 'autre@x.be')), /ne correspond pas/); ok('From usurpé refusé');
   await assert.rejects(() => mail.send('imap_moi_exemple_be', raw, 'a', 'b'), /non confirmé/); ok('envoi sans confirmation refusé');
+
+  // Jarvis conversationnel
+  const jv = require('../src/jarvis');
+  const g = jv.greeting(); assert(g.intro.startsWith('Bonjour') && g.intro.includes("Que puis-je faire pour vous aujourd'hui ?") && /checker vos mails/.test(g.offer) && /veille/.test(g.offer)); ok('salutation : Bonjour + question + capacités');
+  store.settings.set({ profile: { nom: 'Camille Martin' } }); assert(jv.greeting().intro === "Bonjour Camille Martin. Que puis-je faire pour vous aujourd'hui ?"); ok('salutation avec le nom de l\'utilisateur');
+  assert.strictEqual(jv.fastRoute('Check mes mails').intent, 'mails'); assert.strictEqual(jv.fastRoute('fais une veille sur la ZBE').args.topic, 'la ZBE'); assert.strictEqual(jv.fastRoute('Quel est mon agenda demain ?').args.days, 2); ok('comprend « check mes mails », « fais une veille sur… », « agenda demain »');
+  store.settings.set({ mail: { accounts: [] } }); let r = await jv.command({ text: 'check mes mails' }); assert(r.ok && /compte courriel/.test(r.say) && r.navigate === 'courriels'); ok('mails sans compte → explique et ouvre Courriels');
+  store.write('veille', { items: [], runs: [] }); r = await jv.command({ text: 'fais une veille sur la mobilité douce' }); assert(r.ok && r.intent === 'veille_topic' && r.md.includes('Tram 10') && r.say); ok('veille sur un sujet → résultats + réponse parlée');
+  r = await jv.command({ text: 'rédige une question sur le tram 10' }).catch((e) => ({ ok: false, error: e.message })); assert(r.ok === true || /Texte de test|brouillon|Tram/.test(JSON.stringify(r))); ok('rédaction vocale → brouillon');
+  r = await jv.command({ text: 'merci' }); assert(r.end === true); ok('« merci » termine la conversation');
+  r = await jv.command({ text: 'retiens que je préfère des questions courtes' }); assert(/noté/.test(r.say)); ok('« retiens que… » alimente le cerveau');
   console.log('\nTous les tests passent ✅'); fs.rmSync(tmp, { recursive: true, force: true });
 })().catch((e) => { console.error('\n❌ ÉCHEC :', e); process.exit(1); });

@@ -86,7 +86,7 @@ document.addEventListener('click', async (e) => {
 });
 
 J.icons = {
-  home: '<path d="M3 11l9-8 9 8M5 10v10h14V10"/>', folder: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
+  orb: '<circle cx="12" cy="12" r="4"/><circle cx="12" cy="12" r="8.5" opacity=".6"/><path d="M12 1.5v2M12 20.5v2M1.5 12h2M20.5 12h2"/>', home: '<path d="M3 11l9-8 9 8M5 10v10h14V10"/>', folder: '<path d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>', file: '<path d="M14 3H7a2 2 0 00-2 2v14a2 2 0 002 2h10a2 2 0 002-2V8zM14 3v5h5M9 13h6M9 17h6"/>',
   pen: '<path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/>', mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
   cal: '<rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>', eye: '<path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
@@ -102,16 +102,19 @@ J.voices = () => (window.speechSynthesis ? speechSynthesis.getVoices() : []).fil
 J.chunks = (text) => { const parts = J.plain(text).match(/[^.!?;:]+[.!?;:]?/g) || []; let buf = ''; const out = []; for (const p of parts) { if ((buf + p).length > 220) { if (buf) out.push(buf.trim()); buf = p; } else buf += p; } if (buf.trim()) out.push(buf.trim()); return out; };
 let speakToken = 0, curAudio = null;
 J.stopSpeak = () => { speakToken++; if (curAudio) { curAudio.pause(); curAudio = null; } if (window.speechSynthesis) speechSynthesis.cancel(); };
-const systemSpeak = (chunks) => {
-  if (!window.speechSynthesis) return J.toast('Synthèse vocale indisponible', 'err');
+const systemSpeak = (chunks) => new Promise((resolve) => {
+  if (!window.speechSynthesis) { J.toast('Synthèse vocale indisponible', 'err'); return resolve(); }
   const v = J.S?.voice || {}; const voices = J.voices();
   const voice = voices.find((x) => x.name === v.ttsVoice) || voices.find((x) => /fr-BE/i.test(x.lang)) || voices[0];
-  for (const c of chunks) { const u = new SpeechSynthesisUtterance(c); u.lang = voice?.lang || 'fr-FR'; if (voice) u.voice = voice; u.rate = Number(v.ttsRate) || 1; speechSynthesis.speak(u); }
-};
+  chunks.forEach((c, i) => { const u = new SpeechSynthesisUtterance(c); u.lang = voice?.lang || 'fr-FR'; if (voice) u.voice = voice; u.rate = Number(v.ttsRate) || 1; if (i === chunks.length - 1) { u.onend = u.onerror = () => resolve(); } speechSynthesis.speak(u); });
+});
 const playWav = (b64, token) => new Promise((res) => { if (token !== speakToken) return res(); const a = new Audio('data:audio/wav;base64,' + b64); curAudio = a; a.onended = a.onerror = () => res(); a.play().catch(() => res()); });
 // Parler : voix Piper (open source, hors-ligne) si installée, sinon voix macOS.
 J.speak = async (text) => {
   J.stopSpeak(); const my = speakToken; const chunks = J.chunks(text); if (!chunks.length) return;
+  J.speaking = true; try { await speakInner(chunks, my); } finally { if (my === speakToken) J.speaking = false; }
+};
+const speakInner = async (chunks, my) => {
   if ((J.S?.voice?.engine) === 'piper') {
     try {
       let next = J.call('voice.synth', { text: chunks[0] });
@@ -119,33 +122,58 @@ J.speak = async (text) => {
       return;
     } catch (e) { J.toast('Voix Piper indisponible, voix système utilisée : ' + e.message, 'err'); }
   }
-  systemSpeak(chunks);
+  await systemSpeak(chunks);
 };
 J.act.speakEl = (el) => { const t = document.querySelector(el.dataset.sel); J.speak(t ? (t.value ?? t.innerText) : ''); };
 J.act.speakStop = () => J.stopSpeak();
 J.speakBtn = (sel) => `<button class="sm" data-act="speakEl" data-sel="${sel}" title="Lire à voix haute">🔊 Écouter</button><button class="sm ghost" data-act="speakStop" title="Arrêter la lecture">⏹</button>`;
 J.micBtn = (target) => `<button class="sm" data-act="mic" data-target="${target}" title="Dicter">🎤 Dicter</button>`;
 
-let rec = null;
-J.act.mic = async (el) => {
-  if (rec) { rec.stop(); return; } // 2e clic = arrêter
-  if (!J.S._env.sttReady) return J.modal(`<h2>🎤 Dictée</h2><p>La transcription vocale n'est pas encore configurée.</p><p><b>Option rapide :</b> utilise la dictée macOS — place le curseur dans le champ et appuie deux fois sur <b>Fn</b> (à activer dans Réglages Système › Clavier › Dictée).</p><p><b>Option intégrée :</b> configure Whisper (OpenAI ou serveur local) dans <a href="#reglages">Réglages › Voix</a>.</p><div class="row"><button class="pri" data-act="closeModal">OK</button></div>`);
-  const st = await J.call('voice.micStatus');
-  if (st !== 'granted') return J.modal(`<h2>Micro refusé</h2><p>Autorise Jarvis Parlement dans Réglages Système › Confidentialité › Micro, puis réessaie.</p><div class="row"><button class="pri" data-act="openMic">Ouvrir les réglages</button><button data-act="closeModal">Fermer</button></div>`);
-  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); } catch { return J.toast('Micro inaccessible', 'err'); }
-  const chunks = []; const old = el.innerHTML;
-  const mr = new MediaRecorder(stream); rec = mr;
-  el.innerHTML = '⏹ Arrêter'; el.classList.add('pri');
-  mr.ondataavailable = (e) => chunks.push(e.data);
-  mr.onstop = async () => {
-    stream.getTracks().forEach((t) => t.stop()); rec = null; el.classList.remove('pri'); el.innerHTML = '<span class="spin"></span> Transcription…'; el.disabled = true;
-    try {
-      const blob = new Blob(chunks, { type: mr.mimeType }); const b64 = await new Promise((res) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.readAsDataURL(blob); });
-      const { text } = await J.call('voice.transcribe', { audio: b64, mime: mr.mimeType });
-      const t = document.getElementById(el.dataset.target); if (t) { t.value = (t.value ? t.value + ' ' : '') + text; t.dispatchEvent(new Event('input')); }
-    } catch (e) { J.err(e); } finally { el.innerHTML = old; el.disabled = false; }
+// Enregistre le micro en WAV 16 kHz mono, avec détection de fin de phrase (silence). Retourne { done: Promise<{wav, spoke, reason}>, stop() }.
+const encodeWav = (chunks, rate) => {
+  let n = 0; for (const c of chunks) n += c.length; const all = new Float32Array(n); let o = 0; for (const c of chunks) { all.set(c, o); o += c.length; }
+  const ratio = rate / 16000; const len = Math.floor(n / ratio); const pcm = new Int16Array(len);
+  for (let i = 0; i < len; i++) { const a = Math.floor(i * ratio), b = Math.min(n, Math.floor((i + 1) * ratio)); let sum = 0; for (let k = a; k < b; k++) sum += all[k]; const v = Math.max(-1, Math.min(1, sum / Math.max(1, b - a))); pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff; }
+  const buf = new ArrayBuffer(44 + len * 2), dv = new DataView(buf); const w = (p, str) => { for (let i = 0; i < str.length; i++) dv.setUint8(p + i, str.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + len * 2, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true); dv.setUint32(24, 16000, true); dv.setUint32(28, 32000, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, len * 2, true);
+  new Int16Array(buf, 44).set(pcm);
+  const bytes = new Uint8Array(buf); let bin = ''; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+};
+J.listen = async ({ vad = true, maxMs = 45000, noSpeechMs = 8000, onLevel, onSpeech } = {}) => {
+  const st = await J.call('voice.micStatus'); if (st !== 'granted') { const e = new Error('Micro refusé'); e.code = 'MIC'; throw e; }
+  let stream; try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } }); } catch { const e = new Error('Micro inaccessible'); e.code = 'MIC'; throw e; }
+  const ctx = new AudioContext(); const src = ctx.createMediaStreamSource(stream); const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const chunks = []; let resolve; const done = new Promise((r) => { resolve = r; });
+  const t0 = performance.now(); let lastVoice = 0, noise = 0, n = 0, spoke = false, over = false;
+  const finish = (reason) => { if (over) return; over = true; try { proc.disconnect(); src.disconnect(); } catch { /* ok */ } stream.getTracks().forEach((t) => t.stop()); const rate = ctx.sampleRate; ctx.close().catch(() => {}); resolve({ reason, spoke, wav: (spoke || !vad) ? encodeWav(chunks, rate) : null }); };
+  proc.onaudioprocess = (e) => {
+    const d = e.inputBuffer.getChannelData(0); chunks.push(new Float32Array(d));
+    let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i]; const rms = Math.sqrt(sum / d.length); const now = performance.now();
+    if (onLevel) onLevel(rms);
+    if (n < 4) { noise = Math.min(0.05, Math.max(noise, rms)); n++; return; }
+    if (rms > Math.max(0.02, noise * 2.5)) { if (!spoke) { spoke = true; if (onSpeech) onSpeech(); } lastVoice = now; }
+    if (vad) { if (spoke && now - lastVoice > 1300) finish('silence'); else if (!spoke && now - t0 > noSpeechMs) finish('nospeech'); }
+    if (now - t0 > maxMs) finish('max');
   };
-  mr.start(); setTimeout(() => { if (rec === mr) mr.stop(); }, 120000);
+  src.connect(proc); proc.connect(ctx.destination);
+  return { done, stop: () => finish('manual') };
+};
+J.transcribe = async (wav) => (await J.call('voice.transcribe', { audio: wav, mime: 'audio/wav' })).text;
+
+// Bouton « Dicter » des formulaires : clic = écouter, 2e clic = arrêter.
+let dict = null;
+J.act.mic = async (el) => {
+  if (dict) { dict.stop(); return; }
+  if (!J.S._env.sttReady) return J.modal(`<h2>🎤 Dictée</h2><p>La reconnaissance vocale n'est pas disponible. Utilise la dictée macOS : appuie deux fois sur <b>Fn</b> dans le champ.</p><p>Ou configure Whisper dans <a href="#reglages">Réglages › Voix</a>.</p><div class="row"><button class="pri" data-act="closeModal">OK</button></div>`);
+  const old = el.innerHTML; let h;
+  try { h = await J.listen({ vad: true, noSpeechMs: 10000 }); } catch (e) { if (e.code === 'MIC') return J.modal(`<h2>Micro refusé</h2><p>Autorise Jarvis Parlement dans Réglages Système › Confidentialité › Micro, puis réessaie.</p><div class="row"><button class="pri" data-act="openMic">Ouvrir les réglages</button><button data-act="closeModal">Fermer</button></div>`); return J.err(e); }
+  dict = h; el.innerHTML = '⏹ Arrêter'; el.classList.add('pri');
+  const r = await h.done; dict = null; el.classList.remove('pri');
+  if (!r.wav) { el.innerHTML = old; return J.toast("Je n'ai rien entendu", 'err'); }
+  el.innerHTML = '<span class="spin"></span> Transcription…'; el.disabled = true;
+  try { const text = await J.transcribe(r.wav); const t = document.getElementById(el.dataset.target); if (t && text) { t.value = (t.value ? t.value + ' ' : '') + text; t.dispatchEvent(new Event('input')); } }
+  catch (e) { J.err(e); } finally { el.innerHTML = old; el.disabled = false; }
 };
 J.act.openMic = () => J.call('voice.openMicSettings');
 window.speechSynthesis && (speechSynthesis.onvoiceschanged = () => {});

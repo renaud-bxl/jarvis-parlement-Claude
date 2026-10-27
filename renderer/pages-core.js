@@ -1,19 +1,19 @@
 // Pages : Accueil (briefing), Parlements, Dossiers (de la veille à la réponse).
 
-// ---------- ACCUEIL ----------
-J.pages.accueil = async (root) => {
+// ---------- TABLEAU DE BORD (ancien accueil : briefing, échéances, raccourcis) ----------
+J.pages.tableau = async (root) => {
   const [last, dos] = await Promise.all([J.call('briefing.last'), J.call('dossiers.list')]);
   const nom = J.S.profile.nom ? ', ' + J.esc(J.S.profile.nom.split(' ')[0]) : '';
   const soon = dos.items.filter((d) => d.stage !== 'clos' && d.deadline).sort((a, b) => a.deadline.localeCompare(b.deadline)).slice(0, 5);
   const tiles = [
     ['recherche', 'Recherche web & projet', 'Antécédents, compétence, angles de questions'], ['documents', 'Analyser un document', 'Sans recherche web, 100 % local possible'],
-    ['accueil', 'Briefing du jour', 'Agenda, dossiers, veille, courrier'], ['courriels', 'Lire & résumer mes courriels', 'Lecture seule, rien n\'est marqué lu'],
+    ['tableau', 'Briefing du jour', 'Agenda, dossiers, veille, courrier'], ['courriels', 'Lire & résumer mes courriels', 'Lecture seule, rien n\'est marqué lu'],
     ['courriels', 'Envoyer un .eml', 'Après validation explicite'], ['reglages', 'Configuration', 'Profil, moteur IA, comptes'],
     ['documents', 'Indexer & chercher', 'Dans tous vos documents'], ['diagnostic', 'Diagnostic', 'Tout vérifier en un clic'],
     ['agenda', 'Google Agenda', 'Connexion native'], ['veille', 'Veille automatique', 'Activer ou retirer'], ['redaction', 'Modèles par parlement', 'Question, interpellation, résolution…'],
   ];
   root.innerHTML = `
-    <h1>Bonjour${nom} 👋</h1>
+    <h1>Tableau de bord${nom}</h1>
     <p class="sub">${new Date().toLocaleDateString('fr-BE', { dateStyle: 'full' })} · Parlement actif : <b>${J.esc(J.parlName(J.P.actif))}</b></p>
     ${J.S._env.configured ? '' : '<div class="banner"><b>Dernière étape :</b> configure ton moteur IA pour activer Jarvis. <a href="#reglages">Ouvrir les Réglages →</a></div>'}
     <div class="card">

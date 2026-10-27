@@ -94,13 +94,13 @@ async function askIndex({ query, k = 6, synthesize }) {
 }
 
 // Veille
-async function runVeille() {
+async function runVeille(override) {
   needAI();
-  const st = store.settings.get(); const topics = st.veille.topics;
+  const st = store.settings.get(); const topics = override || st.veille.topics;
   if (!topics.length) throw new Error('Ajoute au moins un sujet de veille.');
   const db = store.read('veille', { items: [], runs: [] });
   const known = new Set(db.items.map((i) => i.url || i.title));
-  let created = 0; const errors = []; const runStart = store.now();
+  let created = 0; const errors = []; const runStart = store.now(); const fresh = [];
   for (const t of topics) {
     try {
       const out = await llm.complete({
@@ -112,7 +112,7 @@ async function runVeille() {
       for (const it of items) {
         const key = it.url || it.titre; if (!it.titre || known.has(key)) continue; known.add(key);
         db.items.unshift({ id: store.uid('v'), topic: t.label, parlement: t.parlement || '', title: it.titre, summary: it.resume || '', url: it.url || '', date: it.date || '', source: it.source || '', score: Number(it.pertinence) || 1, idea: it.piste || '', found: store.now(), status: 'new' });
-        created++;
+        fresh.push(db.items[0]); created++;
       }
     } catch (e) { errors.push(`${t.label} : ${e.message}`); }
   }
@@ -122,8 +122,8 @@ async function runVeille() {
   db.items = db.items.slice(0, 400);
   db.runs.unshift({ t: store.now(), created, errors }); db.runs = db.runs.slice(0, 30);
   store.write('veille', db);
-  store.settings.set({ veille: { lastRun: store.now() } });
-  return { created, errors };
+  if (!override) store.settings.set({ veille: { lastRun: store.now() } });
+  return { created, errors, items: fresh };
 }
 const veilleItems = () => store.read('veille', { items: [], runs: [] });
 function veilleSetStatus(id, status) { const d = veilleItems(); const i = d.items.find((x) => x.id === id); if (i) i.status = status; store.write('veille', d); return true; }
@@ -190,4 +190,4 @@ async function chat({ messages, useWeb, useDocs }) {
   return { text: out.text, sources: out.sources, docs: hits.map((h) => h.name) };
 }
 
-module.exports = { webResearch, analyzeDocument, askIndex, runVeille, veilleItems, veilleSetStatus, briefing, draft, chat, parlementName };
+module.exports = { system, needAI, webResearch, analyzeDocument, askIndex, runVeille, veilleItems, veilleSetStatus, briefing, draft, chat, parlementName };

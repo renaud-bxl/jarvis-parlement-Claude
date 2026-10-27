@@ -45,7 +45,7 @@ function createWindow() {
     title: 'Jarvis Parlement',
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 },
     backgroundColor: '#f6f4ef',
-    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true, autoplayPolicy: 'no-user-gesture-required' },
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   win.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(url)) shell.openExternal(url); return { action: 'deny' }; });
@@ -70,7 +70,7 @@ function menu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { label: app.name, submenu: [{ role: 'about', label: 'À propos de Jarvis Parlement' }, { type: 'separator' }, { role: 'hide' }, { role: 'hideOthers' }, { role: 'unhide' }, { type: 'separator' }, { role: 'quit', label: 'Quitter' }] },
     { label: 'Édition', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
-    { label: 'Aller', submenu: ['accueil', 'dossiers', 'recherche', 'documents', 'redaction', 'courriels', 'agenda', 'veille', 'cerveau', 'assistant', 'reglages', 'diagnostic'].map((p, i) => ({ label: p[0].toUpperCase() + p.slice(1), accelerator: i < 9 ? `CmdOrCtrl+${i + 1}` : undefined, click: () => emit('navigate', p) })) },
+    { label: 'Aller', submenu: ['accueil', 'tableau', 'dossiers', 'recherche', 'documents', 'redaction', 'courriels', 'agenda', 'veille', 'cerveau', 'assistant', 'reglages', 'diagnostic'].map((p, i) => ({ label: p[0].toUpperCase() + p.slice(1), accelerator: i < 9 ? `CmdOrCtrl+${i + 1}` : undefined, click: () => emit('navigate', p) })) },
     { label: 'Fenêtre', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { type: 'separator' }, { role: 'front' }, { role: 'toggleDevTools' }] },
   ]));
 }

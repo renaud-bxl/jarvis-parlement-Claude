@@ -1,0 +1,48 @@
+/* Écran Jarvis : scène sombre, orbe bleu de Bruxelles avec reflets jaunes, texte qui apparaît au rythme de la voix. */
+.jv{--jb:#07306a;--jb2:#0a1f3f;--jy:#ffd21f;position:relative;min-height:calc(100vh - 84px);border-radius:22px;padding:22px 28px 26px;display:flex;flex-direction:column;align-items:center;color:#eaf1ff;
+  background:radial-gradient(120% 90% at 50% 18%,#0d4a9a 0%,var(--jb) 38%,var(--jb2) 100%);overflow:hidden;box-shadow:0 20px 60px rgba(7,48,106,.35)}
+.jv::before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 50% 0,rgba(255,210,31,.10),transparent 45%);pointer-events:none}
+.jv>*{position:relative}
+.jv-top{width:100%;display:flex;justify-content:space-between;align-items:center;font-size:13px;color:#a9c4ee}
+.jv-parl{letter-spacing:.02em}
+.jv-link{color:#cfe0ff;text-decoration:none;border:1px solid rgba(255,255,255,.22);padding:5px 12px;border-radius:99px;font-size:12.5px}.jv-link:hover{background:rgba(255,255,255,.1)}
+.jv-ico{background:transparent;border:1px solid rgba(255,255,255,.22);color:#fff;border-radius:99px;padding:4px 9px}.jv-ico:hover{background:rgba(255,255,255,.12)}
+.orb-btn{all:unset;cursor:pointer;display:block;width:230px;height:230px;margin-top:0;border-radius:50%;transition:transform .3s}
+.orb-btn:hover{transform:scale(1.02)}.orb-btn:focus-visible{outline:2px solid var(--jy);outline-offset:4px}
+.orb-btn canvas{width:100%;height:100%;display:block}
+.compact .orb-btn{width:150px;height:150px;margin-top:0}
+.jv-hello{text-align:center;margin-top:-8px;min-height:112px}
+.compact .jv-hello{min-height:0}
+.jv-hello>div{opacity:0;transform:translateY(8px);transition:opacity .7s ease,transform .7s ease}
+.jv-hello>div.in{opacity:1;transform:none}
+.jv-hello .h1{font-size:46px;font-weight:300;letter-spacing:-.025em;line-height:1.05}
+.jv-hello .h2{font-size:27px;font-weight:600;color:var(--jy);margin-top:4px;letter-spacing:-.01em}
+.jv-hello .h3{font-size:19px;font-weight:400;color:#cfe0ff;margin-top:10px}
+.compact .jv-hello .h1{font-size:30px}.compact .jv-hello .h2{font-size:20px;display:inline;margin-left:10px}.compact .jv-hello .h3{font-size:15px;margin-top:2px}
+.jv-can{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:5px;align-items:center;max-width:640px}
+.compact .jv-can{display:none}
+.jv-can li{opacity:0;transform:translateY(8px);transition:opacity .6s ease,transform .6s ease}.jv-can li.in{opacity:1;transform:none}
+.jv-can button{background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.2);color:#eaf1ff;font-weight:400;font-size:15px;padding:6px 16px;border-radius:99px}
+.jv-can button b{font-weight:600;color:#fff}
+.jv-can button:hover{background:rgba(255,210,31,.16);border-color:var(--jy)}
+.jv-can .more span{color:#9db9e6;font-size:14px}
+.jv-status{min-height:20px;margin-top:8px;font-size:14px;color:var(--jy);text-align:center}
+.jv-heard{min-height:20px;font-size:15px;color:#a9c4ee;text-align:center;font-style:italic;max-width:760px}
+.jv-say{max-width:760px;text-align:center;font-size:18px;line-height:1.5;color:#fff;margin:6px 0 4px}
+.jv-say:empty{display:none}
+.jv-out{width:100%;max-width:860px}
+.jv-card{background:#fff;color:#0a1f3f;border-radius:14px;padding:16px 20px;margin-top:12px;max-height:44vh;overflow:auto;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.jv-card .md h1,.jv-card .md h2,.jv-card .md h3{color:#07306a}
+.jv-card button{color:#0a1f3f}
+.jv-actions{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:12px}
+.jv-actions .chip{background:rgba(255,255,255,.08);color:#eaf1ff;border-color:rgba(255,255,255,.25);font-weight:400}.jv-actions .chip:hover{background:rgba(255,210,31,.18);border-color:var(--jy)}
+.jv-actions .pri{background:var(--jy);border-color:var(--jy);color:#0a1f3f}
+.jv-bar{display:flex;gap:10px;align-items:center;width:100%;max-width:820px;margin-top:auto;padding-top:14px}
+.jv-bar input{flex:1;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:99px;padding:12px 18px;font-size:15px}
+.jv-bar input::placeholder{color:#8fa9d4}
+.jv-bar input:focus{border-color:var(--jy);box-shadow:0 0 0 3px rgba(255,210,31,.22)}
+.jv-bar .pri{border-radius:99px;background:var(--jy);border-color:var(--jy);color:#0a1f3f;padding:11px 20px}
+.jv-mic{width:48px;height:48px;border-radius:50%;padding:0;justify-content:center;font-size:20px;background:var(--jy);border-color:var(--jy);color:#0a1f3f}.jv-mic:hover{background:#ffe066}
+.jv-conv{margin-top:12px;font-size:12.5px;color:#9db9e6;display:flex;align-items:center}
+@media (prefers-reduced-motion:reduce){.jv-hello>div,.jv-can li{transition:none}.orb-btn{transition:none}}
+@media (max-width:1100px){.jv-hello .h1{font-size:38px}}
