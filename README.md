@@ -1,6 +1,6 @@
 # Jarvis Parlement
 
-📄 **Page de présentation :** https://renaud-bxl.github.io/jarvis-parlement-Claude/
+📄 **Page de présentation (captures d'écran et toutes les fonctions) :** https://renaud-bxl.github.io/jarvis-parlement-Claude/
 
 Application Mac complète pour parlementaires : de la **veille** à la **question ou interpellation déposée**, avec un **cerveau** qui apprend vos préférences au fil de l'usage.
 
@@ -19,10 +19,21 @@ Ou manuellement : télécharger le `.dmg` dans l'onglet **Releases** (`arm64` po
 À l'ouverture, Jarvis te salue à voix haute (« Bonjour », ton nom, « Que puis-je faire pour vous aujourd'hui ? ») et énumère ce qu'il sait faire. Touche l'orbe (ou le micro) et parle : « check mes mails », « fais une veille sur la ZBE », « rédige une question sur le tram 10 », « qu'est-ce que j'ai à l'agenda demain ? ». Il comprend, agit, te répond à voix haute et affiche le détail. En mode « conversation continue », il t'écoute à nouveau après chaque réponse ; « merci » met fin à l'échange.
 
 - **Écoute** : reconnaissance vocale de macOS (gratuite, sans clé, autorisation « Reconnaissance vocale » + « Micro » demandée au premier usage). Whisper reste disponible en option.
-- **Voix** : voix humaines françaises open source (modèles Piper, 2 femmes + 2 hommes, ≈ 21 Mo chacune, hors-ligne) ou voix macOS.
+- **Voix** : voix humaines françaises hors-ligne fournies avec l'application (féminine par défaut, voix d'homme au choix dans les Réglages). La voix du Mac n'est jamais utilisée.
 - Jarvis n'envoie jamais un courriel et ne dépose jamais rien sans ta validation ; pour résumer tes courriels avec un moteur en ligne, il te demande d'abord ton accord.
 
-## Ce que fait Jarvis
+## Fonctions de la version 1.7
+
+- **Jarvis, assistant vocal** : écran d'accueil avec orbe animé, réveil par « Hé Jarvis », écoute hors-ligne sur le Mac, réponses parlées.
+- **Boîte mail intelligente** : tous les comptes (Gmail, IMAP/SMTP), classement local en lecture seule (attente de réaction, événements, importants, à lire, newsletters), « Alerte suivi », expéditeurs « Urgent », bouton « Ajouter à mon agenda » (Google Agenda ou Agenda d'Apple), lecture à voix haute, réponse proposée (envoi après confirmation), surveillance en arrière-plan avec notifications macOS.
+- **Agenda Google** en lecture seule (heures de Bruxelles, vue par jour, prochain événement, liens visio).
+- **Veille sur la presse belge** : 42 sources connues d'avance, cases à cocher et sources personnelles dans les Réglages, liens cités, veille planifiée. Belga est en partie sous abonnement ; certains sites n'ont pas de flux public.
+- **Rédiger et modèles Word** : modèles par parlement (8 assemblées + parlements personnalisés), dossier `00-Modeles` pour vos propres modèles, rédaction fidèle au modèle, fichier `.docx` à télécharger, mentions « À vérifier ».
+- **Dossiers** (veille, recherche, rédaction, relecture, dépôt, suivi, clos), recherche web sur un projet, analyse de document sans web, index documentaire, **cerveau** lisible, corrigeable, exportable et effaçable.
+- **Moteur IA au choix** : Claude (Anthropic), OpenAI (GPT), Ollama (local), autre serveur compatible OpenAI ; liste des modèles du compte affichée dès la clé saisie ; consentement avant tout envoi de courriel ou de document vers un moteur en ligne.
+- **Mises à jour automatiques** depuis GitHub (empreinte du fichier contrôlée, retour arrière en cas d'échec), diagnostic en un clic, assistant de mise en route en 4 étapes.
+
+## Les 12 actions de base
 
 | | Fonction |
 |---|---|
@@ -56,11 +67,12 @@ Chaque parlement actif reçoit automatiquement son dossier :
 Jarvis retient vos préférences (style, ton, thèmes, procédure, sources, ce qu'il faut éviter) à partir de vos demandes, de **vos corrections de brouillons** et de vos 👍/👎. Page *Cerveau* : tout est visible, modifiable, épinglable, exportable, effaçable. Les contenus de documents et de courriels n'y sont jamais transmis.
 
 ### Voix
-- **Parler** : [Piper](https://github.com/rhasspy/piper) (open source, gratuit, hors-ligne), voix françaises femme/homme téléchargées à la demande (Réglages › Voix). Repli : voix macOS.
+- **Parler** : voix humaines françaises open source ([Piper](https://github.com/rhasspy/piper)), hors-ligne, fournies avec l'application (Réglages › Voix pour choisir une voix d'homme).
 - **Écouter** : micro → Whisper (API OpenAI ou serveur local compatible). Sans cela : dictée macOS (Fn Fn).
 
 ## Moteur IA
 - **Claude (Anthropic)** — recherche web intégrée (clé API : console.anthropic.com).
+- **OpenAI (GPT)** — clé API (platform.openai.com).
 - **Ollama / serveur compatible OpenAI** — 100 % local ; la recherche web utilise alors un mode de secours moins fiable.
 
 Les clés et mots de passe sont chiffrés par le trousseau macOS. Aucune télémétrie.

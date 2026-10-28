@@ -3,123 +3,142 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Jarvis Parlement — l'assistant des parlementaires, sur Mac</title>
-<meta name="description" content="Veille, recherche, rédaction par parlement, courriels, agenda et un cerveau qui apprend vos préférences. Une commande pour l'installer sur Mac.">
-<link rel="icon" href="img/icon.png">
+<title>Jarvis Parlement — l'assistant vocal des parlementaires belges</title>
+<meta name="description" content="Jarvis Parlement lit et trie vos courriels, surveille la presse belge, rédige vos questions dans vos modèles Word et vous écoute sur Mac. Il prépare, vous décidez. Gratuit et libre.">
+<meta name="theme-color" content="#07306a">
+<link rel="icon" type="image/png" href="img/icon.png">
+<link rel="apple-touch-icon" href="img/icon.png">
+<meta property="og:type" content="website">
+<meta property="og:locale" content="fr_BE">
+<meta property="og:title" content="Jarvis Parlement — l'assistant vocal des parlementaires belges">
+<meta property="og:description" content="Courriels triés, veille sur la presse belge, questions rédigées dans vos modèles Word. Jarvis prépare, vous décidez. Application Mac gratuite et libre.">
+<meta property="og:image" content="https://renaud-bxl.github.io/jarvis-parlement-Claude/img/og-image.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="L'écran d'accueil de Jarvis : un orbe bleu et or, et la salutation «&nbsp;Bonjour Camille Martin&nbsp;» (données de démonstration).">
+<meta property="og:url" content="https://renaud-bxl.github.io/jarvis-parlement-Claude/">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&display=swap" rel="stylesheet">
 <style>
 :root{
-  --paper:#f4f7fb; --ink:#0a1f3f; --mute:#4f6080; --line:#d6dfec; --white:#fff;
-  --act:#0b5cad; --act-ink:#fff; --gold:#ffd21f; --blue-deep:#07306a;
+  --paper:#f4f7fb; --white:#fff; --ink:#0a1f3f; --mute:#44557a; --line:#d3ddeb;
+  --act:#0b5cad; --blue-deep:#07306a; --night:#071530; --gold:#ffd21f; --gold-soft:#ffe58a;
   --display:"Bricolage Grotesque","Helvetica Neue",Arial,sans-serif;
   --text:"Source Serif 4",Georgia,"Times New Roman",serif;
   --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--paper);color:var(--ink);font:19px/1.62 var(--text);-webkit-font-smoothing:antialiased}
+html{scroll-behavior:smooth;scroll-padding-top:16px}
+body{margin:0;background:var(--paper);color:var(--ink);font:18px/1.62 var(--text);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+img{max-width:100%;height:auto;display:block}
 a{color:var(--act);text-underline-offset:3px}
-a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--act);outline-offset:3px;border-radius:6px}
-.wrap{max-width:1080px;margin:0 auto;padding:0 28px}
-h1,h2,h3{font-family:var(--display);line-height:1.08;margin:0;letter-spacing:-.02em;color:var(--ink)}
-h1{font-size:clamp(40px,6.4vw,72px);font-weight:800;max-width:15ch}
-h2{font-size:clamp(28px,3.6vw,42px);font-weight:700;max-width:22ch}
-h3{font-size:21px;font-weight:700;letter-spacing:-.01em}
+a:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--gold);outline-offset:3px;border-radius:6px;box-shadow:0 0 0 6px var(--blue-deep)}
+.on-paper a:focus-visible,.on-paper button:focus-visible,.on-paper summary:focus-visible{outline-color:var(--act);box-shadow:none}
+.wrap{max-width:1120px;margin:0 auto;padding:0 24px}
+h1,h2,h3{font-family:var(--display);line-height:1.1;margin:0;letter-spacing:-.02em}
+h1{font-size:clamp(36px,5.4vw,60px);font-weight:800;max-width:21ch}
+h2{font-size:clamp(28px,3.4vw,40px);font-weight:700;max-width:24ch}
+h3{font-size:20px;font-weight:700;letter-spacing:-.01em}
 p{margin:0 0 1em;max-width:62ch}
-section{padding:92px 0}
-.lede{font-size:clamp(20px,2.2vw,24px);color:var(--mute);max-width:46ch;margin-top:22px}
+.skip{position:absolute;left:12px;top:-60px;background:var(--gold);color:var(--blue-deep);font:700 16px var(--display);padding:10px 16px;border-radius:8px;z-index:20;text-decoration:none}
+.skip:focus{top:12px}
+.eyebrow{font:700 13px var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--act);margin:0 0 12px}
 
-/* header */
-.top{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
-.brand{display:flex;align-items:center;gap:12px;font:700 20px var(--display);color:var(--ink);text-decoration:none}
+/* bandeau haut */
+.band{background:var(--blue-deep);color:#e6eefc}
+.top{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:20px 0}
+.brand{display:flex;align-items:center;gap:12px;font:700 20px var(--display);color:#fff;text-decoration:none}
 .brand img{width:38px;height:38px}
-.top nav{display:flex;gap:26px;font:500 16px var(--display)}
-.top nav a{color:var(--ink);text-decoration:none}
-.top nav a:hover{text-decoration:underline}
+.top nav{display:flex;align-items:center;gap:24px;font:500 15.5px var(--display)}
+.top nav a{color:#dbe7ff;text-decoration:none}
+.top nav a:hover{color:#fff;text-decoration:underline}
+.top nav a.btn-nav{background:var(--gold);color:var(--blue-deep);font-weight:700;padding:8px 16px;border-radius:99px}
+.top nav a.btn-nav:hover{background:var(--gold-soft);text-decoration:none}
 
-/* hero */
-.hero{padding:36px 0 70px}
-.hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
-.hero-grid>*,.two>*{min-width:0}
-.install{margin-top:38px;max-width:640px}
-.cmd{display:flex;align-items:stretch;background:var(--ink);border-radius:14px;overflow:hidden;box-shadow:0 14px 34px -14px rgba(14,26,43,.55)}
-.cmd code{flex:1;min-width:0;padding:20px 22px;color:#e8eefc;font:15px/1.55 var(--mono);white-space:normal;overflow-wrap:anywhere}
-.cmd code b{color:#ffd21f;font-weight:400}
-.copy{border:0;background:var(--gold);color:var(--blue-deep);font:800 17px var(--display);padding:0 28px;cursor:pointer;min-width:132px;transition:background .15s}
-.copy:hover{background:#ffe066}.copy.ok{background:#2fb36f;color:#fff}
-.alt{margin-top:16px;font:500 16px var(--display);color:var(--mute)}
-.alt a{color:var(--ink)}
-.req{margin-top:6px;font-size:16px;color:var(--mute)}
+/* héro */
+.hero{padding:34px 0 44px}
+.hero h1{color:#fff}
+.hero .lede{font-size:clamp(19px,2.1vw,23px);color:#c9d9f5;max-width:44ch;margin:20px 0 0}
+.install{margin-top:30px;max-width:720px}
+.cmd{display:flex;align-items:stretch;background:var(--night);border:1px solid #1d3a73;border-radius:14px;overflow:hidden}
+.cmd code{flex:1;min-width:0;padding:18px 20px;color:#e8eefc;font:14.5px/1.55 var(--mono);overflow-wrap:anywhere}
+.cmd code b{color:var(--gold);font-weight:400}
+.copy{border:0;background:var(--gold);color:var(--blue-deep);font:800 16px var(--display);padding:0 26px;cursor:pointer;min-width:128px}
+.copy:hover{background:var(--gold-soft)}
+.copy.ok{background:#8fe3b3}
+.alt{margin:14px 0 0;font:500 15.5px var(--display);color:#c9d9f5;max-width:none}
+.alt a{color:#fff}
+.alt .sep{opacity:.5;margin:0 8px}
+.hero-stage{margin-top:0;background:linear-gradient(to bottom,var(--blue-deep) 0,var(--blue-deep) 42%,var(--paper) 42%,var(--paper) 100%);padding-bottom:18px}
+.hero-stage .wrap{max-width:1180px}
+.shot{margin:0}
+.shot img{width:100%;border-radius:12px;border:1px solid rgba(120,160,255,.28);box-shadow:0 30px 60px -26px rgba(4,14,40,.75)}
+.zoom{display:block;border-radius:12px}
+.shot figcaption{font:500 14px var(--display);color:var(--mute);margin-top:10px}
+.shot figcaption b{color:var(--ink)}
 
-/* hemicycle */
-.hemi{position:relative}
-.hemi svg{width:100%;height:auto;display:block;overflow:visible}
-.seat{transition:opacity .2s,transform .2s}
-.hemi.dim .seat{opacity:.16}
-.hemi.dim .seat.on{opacity:1}
-.you{fill:var(--gold);stroke:var(--act);stroke-width:2.2}
-.legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
-.legend button{font:500 14.5px var(--display);border:1.5px solid var(--line);background:var(--white);color:var(--ink);padding:7px 12px 7px 10px;border-radius:99px;cursor:pointer;display:inline-flex;align-items:center;gap:8px}
-.legend button:hover,.legend button[aria-pressed=true]{border-color:var(--ink)}
-.legend i{width:12px;height:12px;border-radius:50%;display:inline-block}
-.panel{min-height:96px;margin-top:16px;padding:16px 18px;border-left:6px solid var(--act);background:var(--white);border-radius:0 12px 12px 0;font-size:17px}
-.panel b{font-family:var(--display);display:block;font-size:19px;margin-bottom:2px}
-.panel span{color:var(--mute)}
+/* sections */
+section{padding:84px 0}
+.lede2{font-size:clamp(19px,2vw,22px);color:var(--mute);max-width:50ch;margin-top:16px}
+.split{display:grid;grid-template-columns:minmax(0,4.4fr) minmax(0,7.6fr);gap:56px;align-items:start}
+.split.rev{grid-template-columns:minmax(0,7.6fr) minmax(0,4.4fr)}
+.split.rev .txt{order:2}
+.split.rev .shot{order:1}
+.split .shot{position:sticky;top:20px}
+.txt .lede2{margin-bottom:26px}
+.pts{list-style:none;padding:0;margin:0}
+.pts li{padding:14px 0;border-top:1px solid var(--line)}
+.pts li:last-child{border-bottom:1px solid var(--line)}
+.pts b{font:700 17px var(--display);display:block;margin-bottom:2px}
+.pts span{color:var(--mute);font-size:17px;line-height:1.5;display:block}
+.note{margin-top:20px;padding:12px 16px;border-left:5px solid var(--gold);background:var(--white);border-radius:0 10px 10px 0;font-size:16.5px;color:var(--mute);max-width:none}
+.note b{color:var(--ink)}
 
-/* parcours */
-.flow{margin-top:42px;list-style:none;padding:0;display:grid;grid-template-columns:repeat(7,1fr);gap:0;counter-reset:s}
-.flow li{counter-increment:s;position:relative;padding:18px 14px 0 0;border-top:3px solid var(--ink)}
-.flow li::before{content:counter(s);position:absolute;top:-17px;left:0;background:var(--paper);padding-right:8px;font:800 24px var(--display)}
-.flow li:last-child{border-top-color:var(--gold);border-top-width:5px;margin-top:-1px}
-.flow h3{font-size:17px;margin-top:6px}
-.flow p{font-size:15.5px;line-height:1.45;color:var(--mute);margin:6px 0 0}
+/* voix */
+.say{margin:30px 0 0;padding:0;list-style:none;display:grid;grid-template-columns:1fr 1fr;gap:0 48px}
+.say li{font:600 clamp(20px,2.2vw,26px)/1.25 var(--display);letter-spacing:-.01em;padding:18px 0 18px 20px;border-left:5px solid var(--gold);border-top:1px solid var(--line);margin-left:0}
+.say li small{display:block;font:500 15px var(--text);color:var(--mute);margin-top:4px;letter-spacing:0}
+.facts{margin-top:34px;display:grid;grid-template-columns:repeat(3,1fr);gap:36px}
+.facts h3{margin-bottom:6px}
+.facts p{font-size:17px;color:var(--mute);margin:0}
 
-/* fonctions */
-.fn{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:0 64px}
-.fn div{padding:18px 0;border-top:1px solid var(--line)}
-.fn dt{font:700 19px var(--display);margin:0 0 2px}
-.fn dd{margin:0;color:var(--mute);font-size:17px;line-height:1.5}
-.fn dl{margin:0}
-
-/* captures */
-.shot{margin-top:34px}
-.win{background:#0f141f;border-radius:14px;overflow:hidden;box-shadow:0 30px 60px -28px rgba(14,26,43,.6);border:1px solid #1d2638}
-.win .bar{height:34px;display:flex;align-items:center;gap:7px;padding:0 14px;background:#161d2c}
-.win .bar i{width:12px;height:12px;border-radius:50%;background:#2c364b}
-.win img{display:block;width:100%;height:auto}
-.cap{font-size:15px;color:var(--mute);margin-top:12px}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:56px;align-items:start}
-
-/* arborescence */
-.tree{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:22px 24px;font:14.5px/1.75 var(--mono);color:var(--ink);overflow-x:auto;white-space:pre;margin:0}
-.tree em{font-style:normal;color:var(--mute)}
+/* parlements */
+.parl{margin:28px 0 0;padding:0;list-style:none;columns:2;column-gap:32px}
+.parl li{break-inside:avoid;padding:8px 0;border-top:1px solid var(--line);font:600 16px var(--display)}
+.txt,.shot{min-width:0}
+.tree{background:var(--white);border:1px solid var(--line);border-radius:12px;padding:18px 20px;font:14px/1.7 var(--mono);color:var(--ink);overflow-x:auto;white-space:pre;margin:24px 0 0;max-width:none}
 .tree strong{font-weight:700;color:var(--act)}
+.tree em{font-style:normal;color:var(--mute)}
 
-/* cerveau */
-.mem{margin:30px 0 0;padding:0;list-style:none;max-width:560px}
-.mem li{padding:13px 0 13px 18px;border-left:5px solid var(--gold);margin-bottom:10px;background:var(--white);border-radius:0 10px 10px 0;font-size:17px}
-.mem small{display:block;color:var(--mute);font:500 13.5px var(--display);margin-top:2px}
-
-/* garde-fous */
+/* bande sombre */
 .dark{background:var(--blue-deep);color:#dfe9fb}
 .dark h2{color:#fff}
-.dark p{color:#c3d3ef}
-.rules{margin-top:34px;display:grid;grid-template-columns:1fr 1fr;gap:34px 64px}
-.rules h3{color:#ffd21f;margin-bottom:6px}
-.rules p{font-size:17px;margin:0}
+.dark .eyebrow{color:var(--gold)}
+.dark .lede2{color:#c3d3ef}
+.dark a{color:var(--gold-soft)}
+.dark .zoom{display:block;border-radius:12px}
+.shot figcaption{color:#c3d3ef}
+.dark .shot figcaption b{color:#fff}
+.rules{margin:34px 0 0;display:grid;grid-template-columns:1fr 1fr;gap:30px 56px;padding:0;list-style:none}
+.rules h3{color:var(--gold);margin-bottom:6px}
+.rules p{font-size:17px;margin:0;color:#d4e1f8}
 
 /* installation */
-.steps{margin:34px 0 0;padding:0;list-style:none;max-width:760px}
-.steps li{display:grid;grid-template-columns:44px 1fr;gap:6px 14px;padding:22px 0;border-top:1px solid var(--line)}
-.steps li>b{grid-row:span 2;font:800 30px/1 var(--display);color:var(--act)}
-.steps h3{font-size:20px}
+.steps{margin:30px 0 0;padding:0;list-style:none;max-width:780px;counter-reset:s}
+.steps>li{counter-increment:s;display:grid;grid-template-columns:44px 1fr;gap:4px 14px;padding:22px 0;border-top:1px solid var(--line)}
+.steps>li::before{content:counter(s);grid-row:span 3;font:800 32px/1 var(--display);color:var(--act)}
 .steps p{margin:4px 0 0;color:var(--mute);font-size:17px}
-kbd,.k{font:14.5px var(--mono);background:var(--white);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
-.cmd.small code{font-size:13.5px;padding:15px 18px}
-body{overflow-x:hidden}
+.steps .cmd{margin-top:12px;background:var(--ink);border-color:var(--ink)}
+.steps .cmd code{font-size:13.5px;padding:15px 18px}
+kbd{font:14px var(--mono);background:var(--white);border:1px solid var(--line);border-radius:6px;padding:1px 7px}
+.first{margin-top:44px;display:grid;grid-template-columns:1fr 1fr;gap:34px 56px}
+.first h3{margin-bottom:8px}
+.first ul{margin:0;padding-left:20px;color:var(--mute);font-size:17px}
+.first li{margin-bottom:6px}
 
+/* faq */
 details{border-top:1px solid var(--line);padding:18px 0}
 details:last-of-type{border-bottom:1px solid var(--line)}
 summary{font:700 19px var(--display);cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:20px}
@@ -128,255 +147,311 @@ summary::after{content:"+";font-weight:500;font-size:26px;line-height:.9}
 details[open] summary::after{content:"–"}
 details p{margin:12px 0 0;color:var(--mute);font-size:17.5px}
 
-footer{padding:44px 0 60px;border-top:1px solid var(--line);font:500 15.5px var(--display);color:var(--mute)}
+footer{padding:40px 0 56px;border-top:1px solid var(--line);font:500 15.5px var(--display);color:var(--mute)}
 footer .wrap{display:flex;flex-wrap:wrap;gap:12px 30px;justify-content:space-between}
 footer a{color:var(--ink)}
 
-@media (max-width:900px){
-  section{padding:68px 0}
-  .hero-grid,.two,.rules,.fn{grid-template-columns:1fr;gap:34px}
-  .fn{gap:0}
-  .flow{grid-template-columns:1fr;gap:0;border-left:3px solid var(--ink);margin-left:6px}
-  .flow li{border-top:0;padding:0 0 26px 22px}
-  .flow li::before{top:0;left:-17px;padding:6px 0;background:var(--paper)}
-  .flow li:last-child{border-left:0}
-  .top nav a:not(:last-child){display:none}
-  .cmd{flex-direction:column}.copy{padding:15px;min-width:0}
+@media (max-width:960px){
+  section{padding:64px 0}
+  .split,.split.rev{grid-template-columns:minmax(0,1fr);gap:30px}
+  .split.rev .txt{order:1}.split.rev .shot{order:2}
+  .split .shot{position:static}
+  .say,.facts,.rules,.first{grid-template-columns:minmax(0,1fr);gap:0}
+  .facts{gap:22px}.rules{gap:22px}.first{gap:28px}
+  .top nav a:not(.btn-nav){display:none}
 }
-@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}.seat,.copy{transition:none}}
+@media (max-width:560px){
+  body{font-size:17px}
+  .cmd{flex-direction:column}.copy{padding:15px;min-width:0}
+  .parl{columns:1}
+  .hero-stage .wrap{padding:0 12px}
+}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 </style>
 </head>
 <body>
+<a class="skip" href="#contenu">Aller au contenu</a>
 
-<div class="wrap">
-  <header class="top">
-    <a class="brand" href="#"><img src="img/icon.png" alt="">Jarvis Parlement</a>
-    <nav aria-label="Navigation"><a href="#parcours">Parcours</a><a href="#parlements">Parlements</a><a href="#cerveau">Cerveau</a><a href="#installer">Installer</a></nav>
-  </header>
+<div class="band">
+  <div class="wrap">
+    <header class="top">
+      <a class="brand" href="#"><a class="zoom" href="img/icon.png" title="Ouvrir l’image en grand"><img src="img/icon.png" alt="" width="38" height="38"></a>Jarvis Parlement</a>
+      <nav aria-label="Navigation de la page">
+        <a href="#voix">Voix</a><a href="#courriels">Courriels</a><a href="#veille">Veille</a><a href="#rediger">Rédiger</a><a href="#dossiers">Dossiers</a><a href="#moteur">Moteur IA</a>
+        <a class="btn-nav" href="#installer">Installer</a>
+      </nav>
+    </header>
+  </div>
 
-  <main>
   <div class="hero">
-    <div class="hero-grid">
-      <div>
-        <h1>Du premier signal à la question déposée.</h1>
-        <p class="lede">Jarvis suit l'actualité, prépare vos recherches, rédige selon le modèle de votre parlement et se souvient de votre façon de travailler. Une application Mac, qui reste chez vous.</p>
-        <div class="install" id="installer-top">
-          <div class="cmd">
-            <code id="cmd"><b>curl</b> -fsSL https://raw.githubusercontent.com/renaud-bxl/jarvis-parlement-Claude/main/install.sh | <b>bash</b></code>
-            <button class="copy" id="copyBtn" type="button" aria-live="polite">Copier</button>
-          </div>
-          <p class="alt">À coller dans le Terminal. Vous préférez un fichier ? <a href="https://github.com/renaud-bxl/jarvis-parlement-Claude/releases/latest">Télécharger le .dmg</a></p>
-          <p class="req">macOS 12 ou plus récent, Mac Apple Silicon ou Intel.</p>
+    <div class="wrap">
+      <h1>Jarvis, l'assistant vocal des parlementaires belges.</h1>
+      <p class="lede">Il lit et trie vos courriels, surveille la presse belge, rédige vos questions dans vos modèles Word et vous répond à voix haute. Il prépare ; vous validez.</p>
+      <div class="install">
+        <div class="cmd">
+          <code id="cmd"><b>curl</b> -fsSL https://raw.githubusercontent.com/renaud-bxl/jarvis-parlement-Claude/main/install.sh | <b>bash</b></code>
+          <button class="copy" id="copyBtn" type="button" aria-live="polite">Copier</button>
         </div>
-      </div>
-
-      <div class="hemi" id="hemi" aria-label="Hémicycle : un secteur par parlement pris en charge">
-        <svg viewBox="0 0 640 345" role="img" aria-labelledby="hemiTitle"><title id="hemiTitle">Hémicycle de sièges répartis en huit secteurs, un par parlement</title><g id="seats"></g></svg>
-        <div class="legend" id="legend" role="group" aria-label="Parlements pris en charge"></div>
-        <div class="panel" id="panel" aria-live="polite"></div>
+        <p class="alt">À coller dans le Terminal du Mac. <span class="sep" aria-hidden="true">·</span> <a href="https://github.com/renaud-bxl/jarvis-parlement-Claude/releases/latest">Télécharger le .dmg</a> <span class="sep" aria-hidden="true">·</span> <a href="https://github.com/renaud-bxl/jarvis-parlement-Claude">Code source</a></p>
+        <p class="alt">macOS, Mac Apple Silicon ou Intel. Gratuit, licence libre MIT.</p>
       </div>
     </div>
   </div>
-
-  <section id="parcours" style="padding-top:36px">
-    <h2>Un dossier suit toutes les étapes, au même endroit.</h2>
-    <p class="lede">Chaque question ou interpellation avance de colonne en colonne. Rien n'est déposé à votre place : Jarvis prépare, vous décidez.</p>
-    <ol class="flow">
-      <li><h3>Veille</h3><p>Vos sujets sont surveillés. Chaque trouvaille propose une piste de question.</p></li>
-      <li><h3>Recherche</h3><p>Antécédents, compétence, chiffres et sources.</p></li>
-      <li><h3>Rédaction</h3><p>Le texte suit le modèle du parlement choisi.</p></li>
-      <li><h3>Relecture</h3><p>Vous corrigez. Jarvis apprend de vos corrections.</p></li>
-      <li><h3>Dépôt</h3><p>Texte exporté ou courriel prêt, après votre validation.</p></li>
-      <li><h3>Suivi</h3><p>La réponse du ministre est classée avec le dossier.</p></li>
-      <li><h3>Clos</h3><p>Archivé dans le dossier du parlement.</p></li>
-    </ol>
-    <div class="shot">
-      <div class="win"><div class="bar"><i></i><i></i><i></i></div><img src="img/dossiers.jpg" alt="Tableau des dossiers : sept colonnes, de la veille au suivi" loading="lazy"></div>
-      <p class="cap">Le tableau des dossiers. Données de démonstration.</p>
-    </div>
-  </section>
-
-  <section id="fonctions" style="padding-top:20px">
-    <h2>Ce que Jarvis fait pour vous.</h2>
-    <dl class="fn">
-      <div><dt>Recherche web et projet parlementaire</dt><dd>Compétence, antécédents, actualité et angles de questions, avec les sources consultées.</dd></div>
-      <div><dt>Analyse d'un document, sans web</dt><dd>Un PDF ou un Word lu en local, sans recherche sur internet. Avec un moteur local, le document ne quitte pas votre Mac.</dd></div>
-      <div><dt>Briefing du jour</dt><dd>Agenda, échéances, veille et courrier résumés en une page.</dd></div>
-      <div><dt>Boîte mail intelligente</dt><dd>Vos mails non lus, de tous vos comptes (Gmail, IMAP), sont rangés par catégorie : attente de réaction, événements, importants, newsletters. Les alertes de suivi, les expéditeurs urgents et un bouton « Ajouter à mon agenda » sont inclus. Lecture seule : rien n'est marqué comme lu ni déplacé.</dd></div>
-      <div><dt>Envoi d'un fichier .eml</dt><dd>Une fenêtre affiche le compte, tous les destinataires et le texte. Rien ne part sans votre clic.</dd></div>
-      <div><dt>Index de vos documents</dt><dd>PDF, Word, texte, mails : indexés sur votre Mac, interrogeables en quelques mots.</dd></div>
-      <div><dt>Google Agenda</dt><dd>Connexion native en lecture seule, avec Gmail si vous le souhaitez.</dd></div>
-      <div><dt>Veille automatique</dt><dd>À l'heure et aux jours que vous choisissez. Un bouton la retire en un clic.</dd></div>
-      <div><dt>Veille sur toute la presse belge</dt><dd>Belga, RTBF, Le Soir, La Libre, La DH, L'Avenir, Sudinfo, L'Echo, Le Vif, BX1, Bruzz, le Moniteur belge et les sites des parlements sont connus d'avance. Vous cochez ou ajoutez vos sources dans les Réglages. Jarvis cherche lui-même et cite les liens, sans vous renvoyer chercher ailleurs.</dd></div>
-      <div><dt>Modèles Word par parlement</dt><dd>Déposez vos propres modèles de question ou d'interpellation : Jarvis les analyse et rédige exactement comme le modèle, puis vous remet un fichier Word à télécharger.</dd></div>
-      <div><dt>Alertes de suivi</dt><dd>Vos mails sont surveillés en arrière-plan. Les mails très importants, les échéances et les expéditeurs urgents déclenchent une notification cliquable.</dd></div>
-      <div><dt>Mises à jour en un clic</dt><dd>Quand une nouvelle version est publiée sur GitHub, Jarvis vous le dit sur l'accueil et l'installe d'un clic.</dd></div>
-      <div><dt>Diagnostic</dt><dd>Moteur, comptes, agenda, index, voix : tout est vérifié et expliqué.</dd></div>
-      <div><dt>Voix</dt><dd>Dites « Hé Jarvis » : il se réveille, comprend, agit et répond avec une voix humaine française (femme ou homme) fournie avec l'application, hors-ligne.</dd></div>
-    </dl>
-    <div class="shot">
-      <div class="win"><div class="bar"><i></i><i></i><i></i></div><img src="img/accueil.jpg" alt="Page d'accueil de Jarvis avec le briefing du jour" loading="lazy"></div>
-      <p class="cap">L'accueil et le briefing du jour. Données de démonstration.</p>
-    </div>
-  </section>
-
-  <section id="parlements" style="padding-top:20px">
-    <div class="two">
-      <div>
-        <h2>Changez de parlement, rien d'autre ne change.</h2>
-        <p class="lede">Un député bruxellois qui rejoint le Parlement francophone ou le Parlement Benelux garde son application, ses dossiers et ses habitudes. Seuls les modèles d'interpellation changent.</p>
-        <p>Huit parlements sont prêts : Bruxelles, Cocof, Chambre, Sénat, Wallonie, Fédération Wallonie-Bruxelles, Benelux et Parlement européen. Vous pouvez aussi en ajouter un qui n'existe pas encore.</p>
-        <p>Les trames de questions sont des points de départ. Longueurs, délais et formes de dépôt sont à vérifier au règlement en vigueur : Jarvis vous le rappelle à la fin de chaque texte.</p>
-      </div>
-      <div>
-        <pre class="tree" aria-label="Arborescence de dossiers créée automatiquement"><strong>Documents/Jarvis-Parlement/</strong>
-├─ <strong>Parlement-Bruxelles/</strong>
-│  ├─ 01-Veille
-│  ├─ 02-Recherches
-│  ├─ 03-Interpellations-et-Questions
-│  ├─ 04-Documents
-│  ├─ 05-Courriers
-│  └─ 06-Archives
-└─ <strong>Parlement-Benelux/</strong>   <em>créé dès que vous l'ajoutez</em></pre>
-        <p class="cap">Chaque parlement ajouté reçoit son dossier et ses sous-dossiers, automatiquement.</p>
-      </div>
-    </div>
-  </section>
-
-  <section id="cerveau" style="padding-top:20px">
-    <div class="two">
-      <div>
-        <h2>Un cerveau qui apprend votre façon de travailler.</h2>
-        <p class="lede">Plus vous l'utilisez, moins vous répétez. Jarvis retient votre style, vos thèmes et vos sources, à partir de vos demandes, de vos corrections et de vos pouces.</p>
-        <ul class="mem">
-          <li>Préfère des questions courtes, chiffrées, sans adjectifs<small>Style de rédaction · vu 6 fois</small></li>
-          <li>Termine toujours par une demande de calendrier précis<small>Style de rédaction · vu 4 fois</small></li>
-          <li>Cite les réponses ministérielles antérieures avec leur numéro<small>Procédure · vu 3 fois</small></li>
-        </ul>
-        <p class="cap">Exemples de souvenirs. Chacun est visible, modifiable, épinglable ou effaçable.</p>
-      </div>
-      <div class="shot" style="margin-top:0">
-        <div class="win"><div class="bar"><i></i><i></i><i></i></div><img src="img/cerveau.jpg" alt="Page Cerveau : liste des préférences apprises" loading="lazy"></div>
-      </div>
-    </div>
-  </section>
-  </main>
-
-  <section id="voix" style="padding-top:20px;padding-bottom:30px">
-    <h2>Jarvis parle, et vous écoute.</h2>
-    <p class="lede">Activez le micro et dites « Hé Jarvis, check mes mails » : l'écoute se fait sur votre Mac (reconnaissance vocale hors-ligne de macOS), rien ne part sur Internet tant que vous ne vous adressez pas à Jarvis. La voix est une voix humaine française, femme par défaut ou homme au choix dans les Réglages, issue de modèles <a href="https://github.com/rhasspy/piper">Piper</a> open source : elle est incluse dans l'application, et la voix de votre ordinateur n'est jamais utilisée.</p>
-  </section>
 </div>
 
-<section class="dark" id="garde-fous">
-  <div class="wrap">
-    <h2>Vos données restent chez vous.</h2>
-    <div class="rules">
-      <div><h3>Jarvis prépare, vous décidez.</h3><p>Il ne dépose rien et n'envoie rien tout seul. Chaque envoi passe par une confirmation qui montre le compte, les destinataires et le texte.</p></div>
-      <div><h3>Clés et mots de passe chiffrés.</h3><p>Ils sont gardés dans le trousseau de macOS. L'application ne contient aucune télémétrie.</p></div>
-      <div><h3>Un moteur local, si vous le voulez.</h3><p>Avec Ollama, vos documents ne quittent jamais votre Mac. Avec Claude, chaque envoi vers le service est demandé et visible.</p></div>
-      <div><h3>Courriels et documents hors du cerveau.</h3><p>Leur contenu n'est jamais transmis à la mémoire de Jarvis.</p></div>
+<main id="contenu">
+    <div class="hero-stage">
+      <div class="wrap">
+        <figure class="shot">
+          <img src="img/jarvis-accueil.jpg" width="1600" height="1066" alt="Écran d'accueil de Jarvis en thème sombre : un orbe bleu et or, la salutation «&nbsp;Bonjour Camille Martin&nbsp;», la demande «&nbsp;Check mes mails&nbsp;» et la réponse de Jarvis suivie du tri des courriels par catégorie, avec le bouton «&nbsp;Ajouter à mon agenda&nbsp;».">
+          <figcaption><b>L'écran Jarvis.</b> Une demande, une réponse parlée, et le détail à l'écran. Données de démonstration.</figcaption>
+        </figure>
+      </div>
     </div>
-  </div>
-</section>
 
-<div class="wrap">
+  <div class="on-paper">
+
+  <section id="voix" style="padding-top:40px">
+    <div class="wrap">
+      <p class="eyebrow">Jarvis, l'assistant vocal</p>
+      <h2>Vous parlez, il agit et il répond.</h2>
+      <p class="lede2">À l'ouverture, Jarvis vous salue à voix haute : «&nbsp;Bonjour&nbsp;», votre nom, «&nbsp;Que puis-je faire pour vous aujourd'hui ?&nbsp;». Activez le micro, dites «&nbsp;Hé Jarvis&nbsp;», puis votre demande.</p>
+      <ul class="say" aria-label="Exemples de demandes">
+        <li>«&nbsp;Check mes mails&nbsp;»</li>
+        <li>«&nbsp;Fais une veille sur la ZBE&nbsp;»</li>
+        <li>«&nbsp;Rédige une question sur le tram 10&nbsp;»</li>
+        <li>«&nbsp;Qu'est-ce que j'ai demain ?&nbsp;»</li>
+        <li>«&nbsp;Lis le deuxième mail&nbsp;»</li>
+        <li>«&nbsp;Réponds-lui que…&nbsp;»<small>Jarvis propose une réponse ; rien ne part sans votre confirmation.</small></li>
+      </ul>
+      <div class="facts">
+        <div><h3>L'écoute reste sur votre Mac</h3><p>Elle utilise la reconnaissance vocale hors-ligne de macOS. Rien ne part sur Internet tant que vous ne vous adressez pas à Jarvis.</p></div>
+        <div><h3>Une vraie voix française</h3><p>Voix humaine hors-ligne, fournie avec l'application : féminine par défaut, voix d'homme au choix. La voix du Mac n'est jamais utilisée.</p></div>
+        <div><h3>Le clavier reste possible</h3><p>Vous pouvez aussi écrire votre demande, ou garder la conversation continue : Jarvis vous écoute de nouveau après chaque réponse.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="courriels" style="padding-top:30px">
+    <div class="wrap split">
+      <div class="txt">
+        <p class="eyebrow">Courriels et agenda</p>
+        <h2>Une boîte mail triée, sans rien toucher à la vraie.</h2>
+        <p class="lede2">Tous vos comptes (Gmail, IMAP/SMTP) : Jarvis classe les courriels non lus et vous montre d'abord ce qui demande votre réaction.</p>
+        <ul class="pts">
+          <li><b>Cinq catégories</b><span>En attente de réaction, événements, importants, à lire, newsletters. Les expéditeurs que vous marquez «&nbsp;Urgent&nbsp;» passent en tête.</span></li>
+          <li><b>Alerte suivi</b><span>Les courriels très importants, les échéances et ceux restés sans réponse sont rappelés jusqu'à ce que vous les traitiez.</span></li>
+          <li><b>Ajouter à mon agenda</b><span>Une date est annoncée ? Jarvis la repère ; vous vérifiez, puis l'ajoutez à Google Agenda ou à l'Agenda d'Apple.</span></li>
+          <li><b>Lire, répondre</b><span>Lecture à voix haute d'un courriel ou de tous. Le bouton Répondre propose un texte ; l'envoi n'a lieu qu'après votre confirmation.</span></li>
+          <li><b>Surveillance en arrière-plan</b><span>Notifications macOS et alertes cliquables en bas à droite de l'application. Les courriels HTML s'affichent visuellement, de façon sécurisée.</span></li>
+        </ul>
+        <p class="note"><b>Lecture seule.</b> Le classement est local : rien n'est marqué comme lu, déplacé ou supprimé dans votre vraie boîte.</p>
+        <p class="note"><b>Agenda Google.</b> Consulté en lecture seule, à l'heure de Bruxelles : vue par jour, prochain événement, liens de visioconférence.</p>
+      </div>
+      <figure class="shot">
+        <a class="zoom" href="img/courriels-boite-intelligente.jpg" title="Ouvrir l’image en grand"><img src="img/courriels-boite-intelligente.jpg" width="1600" height="1155" loading="lazy" alt="Page Courriels, boîte intelligente : pastilles de catégories, une Alerte suivi avec échéance dépassée, une section Attente de réaction et une section Événements avec le bouton «&nbsp;Ajouter à mon agenda&nbsp;»."></a>
+        <figcaption>La boîte intelligente. Données de démonstration.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="veille" style="padding-top:30px">
+    <div class="wrap split rev">
+      <div class="txt">
+        <p class="eyebrow">Veille</p>
+        <h2>Toute la presse belge, déjà connue de Jarvis.</h2>
+        <p class="lede2">42 sources sont prêtes d'avance : Belga, RTBF, Le Soir, La Libre, La DH, L'Avenir, Sudinfo, L'Echo, Le Vif, BX1, Bruzz, le Moniteur belge, les parlements, les gouvernements…</p>
+        <ul class="pts">
+          <li><b>Vous choisissez</b><span>Cases à cocher dans les Réglages, et ajout de vos propres sources.</span></li>
+          <li><b>Jarvis cherche lui-même</b><span>Il lit les flux, parcourt les sites et cite les liens. Il ne vous renvoie pas chercher ailleurs.</span></li>
+          <li><b>Une veille planifiée</b><span>À l'heure et aux jours de votre choix, retirable en un clic.</span></li>
+        </ul>
+        <p class="note"><b>À savoir.</b> Belga est en partie sous abonnement, et certains sites n'ont pas de flux public : Jarvis les consulte alors par la recherche web, limitée à leur domaine.</p>
+      </div>
+      <figure class="shot">
+        <a class="zoom" href="img/reglages-sources-veille.jpg" title="Ouvrir l’image en grand"><img src="img/reglages-sources-veille.jpg" width="1600" height="1045" loading="lazy" alt="Réglages, Sources de veille : 22 sources cochées sur 42, avec la presse francophone belge (RTBF Info, Le Soir, La Libre, La DH, L'Avenir, Sudinfo, L'Echo, Le Vif, BX1) et pour chacune la mention flux RSS ou recherche web, accès libre ou partiel."></a>
+        <figcaption>Réglages, sources de veille. Données de démonstration.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="rediger" style="padding-top:30px">
+    <div class="wrap split">
+      <div class="txt">
+        <p class="eyebrow">Rédiger</p>
+        <h2>Des questions écrites exactement comme votre modèle.</h2>
+        <p class="lede2">Déposez vos propres modèles Word dans le dossier 00-Modeles de votre parlement. Jarvis les analyse, rédige comme eux et vous remet un fichier Word.</p>
+        <ul class="pts">
+          <li><b>Un fichier Word à télécharger</b><span>Téléchargement, ouverture dans Word ou affichage dans le Finder, directement depuis le bloc «&nbsp;Ton fichier Word est prêt&nbsp;».</span></li>
+          <li><b>Des mentions «&nbsp;À vérifier&nbsp;»</b><span>Chiffres, compétence, longueur, forme de dépôt : Jarvis rappelle ce qui reste à contrôler au règlement en vigueur.</span></li>
+          <li><b>Il prépare, il ne dépose rien</b><span>Question écrite, orale, d'actualité, interpellation, résolution… selon l'assemblée choisie.</span></li>
+        </ul>
+        <p class="note"><b>Huit assemblées</b>, plus vos parlements personnalisés :</p>
+        <ul class="parl">
+          <li>Parlement bruxellois</li><li>Parlement francophone bruxellois</li><li>Chambre</li><li>Sénat</li>
+          <li>Parlement wallon</li><li>Parlement de la Fédération Wallonie-Bruxelles</li><li>Benelux</li><li>Parlement européen</li>
+        </ul>
+        <pre class="tree" aria-label="Arborescence de dossiers créée automatiquement"><strong>Documents/Jarvis-Parlement/</strong>
+└─ <strong>Parlement-&lt;Nom&gt;/</strong>   <em>créé automatiquement</em>
+   ├─ 00-Modeles
+   ├─ 01-Veille
+   ├─ 02-Recherches
+   ├─ 03-Interpellations-et-Questions
+   ├─ 04-Documents
+   ├─ 05-Courriers
+   └─ 06-Archives</pre>
+      </div>
+      <figure class="shot">
+        <a class="zoom" href="img/redaction-fichier-word.jpg" title="Ouvrir l’image en grand"><img src="img/redaction-fichier-word.jpg" width="1600" height="1066" loading="lazy" alt="Page Rédiger : une question écrite sur la zone de basses émissions, le bloc «&nbsp;Ton fichier Word est prêt&nbsp;» avec les boutons Télécharger le Word, Ouvrir dans Word et Afficher dans le Finder, la mention «&nbsp;À vérifier avant dépôt&nbsp;» et l'aperçu du texte."></a>
+        <figcaption>Le fichier Word est prêt. Données de démonstration.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="dossiers" style="padding-top:30px">
+    <div class="wrap">
+      <p class="eyebrow">Dossiers et cerveau</p>
+      <h2>De la veille à la question déposée, un dossier suit chaque étape.</h2>
+      <p class="lede2">Sept colonnes : veille, recherche, rédaction, relecture, dépôt, suivi, clos. Chaque question ou interpellation avance de colonne en colonne.</p>
+      <figure class="shot" style="margin-top:30px">
+        <a class="zoom" href="img/dossiers-kanban.jpg" title="Ouvrir l’image en grand"><img src="img/dossiers-kanban.jpg" width="1600" height="768" loading="lazy" alt="Page Dossiers : tableau de sept colonnes, de Veille et idée à Clos, avec des dossiers sur le tram 10, la zone de basses émissions, le logement, le budget 2027 et les crèches."></a>
+        <figcaption>Le tableau des dossiers. Données de démonstration.</figcaption>
+      </figure>
+    </div>
+    <div class="wrap split rev" style="margin-top:64px">
+      <div class="txt">
+        <h2 style="font-size:clamp(26px,3vw,34px)">Un cerveau qui retient vos préférences.</h2>
+        <p class="lede2">Style, thèmes, procédures : Jarvis les retient à partir de vos demandes et de vos corrections. Vous pouvez tout relire, corriger, exporter ou effacer.</p>
+        <ul class="pts">
+          <li><b>Recherche web sur un projet</b><span>Antécédents, compétence, actualité et angles de questions, avec les sources consultées.</span></li>
+          <li><b>Analyse d'un document, sans web</b><span>Un PDF ou un Word est lu sans recherche sur Internet.</span></li>
+          <li><b>Index de vos documents</b><span>PDF, Word, texte, courriels : interrogeables en quelques mots.</span></li>
+        </ul>
+        <p class="note">Le contenu des courriels et des documents n'est jamais transmis à la mémoire du cerveau.</p>
+      </div>
+      <figure class="shot">
+        <a class="zoom" href="img/cerveau.jpg" title="Ouvrir l’image en grand"><img src="img/cerveau.jpg" width="1600" height="970" loading="lazy" alt="Page Cerveau : les souvenirs de Jarvis classés par catégorie, par exemple «&nbsp;Préfère des questions courtes, chiffrées, sans adjectifs&nbsp;», avec les boutons Épingler et Oublier."></a>
+        <figcaption>Le cerveau, modifiable ligne par ligne. Données de démonstration.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="moteur" style="padding-top:30px">
+    <div class="wrap split">
+      <div class="txt">
+        <p class="eyebrow">Moteur IA</p>
+        <h2>Le moteur de votre choix, y compris 100 % local.</h2>
+        <p class="lede2">Jarvis fonctionne avec le fournisseur que vous préférez. Dès que la clé est saisie, la liste des modèles de votre compte s'affiche.</p>
+        <ul class="pts">
+          <li><b>Claude (Anthropic)</b><span>Avec recherche web intégrée. Clé API.</span></li>
+          <li><b>OpenAI (GPT)</b><span>Clé API.</span></li>
+          <li><b>Ollama</b><span>100 % local et gratuit : vos documents ne quittent pas le Mac.</span></li>
+          <li><b>Autre serveur compatible OpenAI</b><span>Par exemple LM Studio.</span></li>
+        </ul>
+        <p class="note"><b>Deux modèles à choisir :</b> un principal, et un modèle rapide pour la mémoire et le tri. Les clés sont chiffrées dans le trousseau macOS, et Jarvis demande votre accord avant d'envoyer un courriel ou un document à un moteur en ligne.</p>
+      </div>
+      <figure class="shot">
+        <a class="zoom" href="img/reglages-moteur-ia.jpg" title="Ouvrir l’image en grand"><img src="img/reglages-moteur-ia.jpg" width="1600" height="853" loading="lazy" alt="Réglages, Moteur IA : choix du fournisseur parmi Claude, OpenAI, Ollama et autre serveur compatible, puis listes de modèles principal et rapide remplies automatiquement."></a>
+        <figcaption>Réglages, moteur IA. Données de démonstration.</figcaption>
+      </figure>
+    </div>
+  </section>
+  </div>
+
+  <section class="dark" id="confiance" aria-labelledby="t-conf">
+    <div class="wrap">
+      <p class="eyebrow">Confiance et mises à jour</p>
+      <h2 id="t-conf">Jarvis prépare. Vous décidez.</h2>
+      <ul class="rules">
+        <li><h3>Rien n'est envoyé ni déposé sans vous</h3><p>Une boîte de confirmation précède tout envoi de courriel. Les textes sont des trames de travail : aucune limite réglementaire n'est inventée.</p></li>
+        <li><h3>Les contenus ne donnent pas d'ordres</h3><p>Le texte d'un courriel, d'un document ou d'une page web est traité comme une donnée, jamais comme une instruction.</p></li>
+        <li><h3>Vos secrets restent chez vous</h3><p>Mots de passe et clés sont gardés dans le trousseau macOS. L'application ne contient aucune télémétrie.</p></li>
+        <li><h3>Un diagnostic en un clic</h3><p>Moteur, comptes, agenda, index, voix : tout est vérifié et expliqué. Un assistant de mise en route guide les quatre premières étapes.</p></li>
+      </ul>
+    </div>
+    <div class="wrap split rev" style="margin-top:56px">
+      <div class="txt">
+        <h2 style="font-size:clamp(26px,3vw,34px)">Mises à jour automatiques.</h2>
+        <p class="lede2">Jarvis vérifie GitHub et annonce une nouvelle version sur l'accueil. L'installation se fait en un clic : le fichier est contrôlé (empreinte) avant d'être utilisé, et un retour arrière est prévu en cas d'échec.</p>
+      </div>
+      <figure class="shot">
+        <a class="zoom" href="img/mise-a-jour.jpg" title="Ouvrir l’image en grand"><img src="img/mise-a-jour.jpg" width="1600" height="1066" loading="lazy" alt="Accueil de Jarvis avec le bandeau «&nbsp;Nouvelle version disponible sur GitHub&nbsp;» et le bouton Mettre à jour, la même alerte dans le menu et en notification en bas à droite."></a>
+        <figcaption>L'annonce d'une nouvelle version. Données de démonstration : le numéro de version est fictif.</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <div class="on-paper">
   <section id="installer">
-    <h2>Installer Jarvis en trois étapes.</h2>
-    <ol class="steps">
-      <li><b>1</b><h3>Copiez la commande</h3><p>Ouvrez le Terminal (Cmd + Espace, tapez « Terminal »), puis collez :</p></li>
-      <li style="border-top:0;padding-top:0;grid-template-columns:44px 1fr"><span></span>
-        <div class="cmd small"><code><b>curl</b> -fsSL https://raw.githubusercontent.com/renaud-bxl/jarvis-parlement-Claude/main/install.sh | <b>bash</b></code><button class="copy" id="copyBtn2" type="button" aria-live="polite">Copier</button></div></li>
-      <li><b>2</b><h3>Laissez l'installation se terminer</h3><p>Le script télécharge la dernière version adaptée à votre Mac, l'installe dans Applications et la lance.</p></li>
-      <li><b>3</b><h3>Renseignez votre profil et votre moteur IA</h3><p>Dans Réglages : votre nom, votre parlement et une clé API Anthropic, ou un moteur local comme Ollama. C'est tout.</p></li>
-    </ol>
-    <p class="alt" style="margin-top:22px">Sans Terminal : téléchargez le .dmg depuis <a href="https://github.com/renaud-bxl/jarvis-parlement-Claude/releases/latest">la page des versions</a>, glissez l'application dans Applications, puis faites clic droit › Ouvrir la première fois.</p>
+    <div class="wrap">
+      <p class="eyebrow">Installation</p>
+      <h2>Installer Jarvis en trois étapes.</h2>
+      <ol class="steps">
+        <li><h3>Copiez la commande</h3><p>Ouvrez le Terminal (<kbd>Cmd</kbd> + <kbd>Espace</kbd>, tapez «&nbsp;Terminal&nbsp;»), puis collez :</p>
+          <div class="cmd"><code><b>curl</b> -fsSL https://raw.githubusercontent.com/renaud-bxl/jarvis-parlement-Claude/main/install.sh | <b>bash</b></code><button class="copy" id="copyBtn2" type="button" aria-live="polite">Copier</button></div></li>
+        <li><h3>Laissez l'installation se terminer</h3><p>Le script télécharge la dernière version adaptée à votre Mac (Apple Silicon ou Intel), l'installe dans Applications, retire l'avertissement de quarantaine et lance l'application.</p></li>
+        <li><h3>Configurez Jarvis en trois minutes</h3><p>Votre profil, votre moteur IA et le micro. La voix est déjà incluse.</p></li>
+      </ol>
+      <p class="alt" style="color:var(--mute);margin-top:22px">Sans Terminal : <a href="https://github.com/renaud-bxl/jarvis-parlement-Claude/releases/latest">téléchargez le .dmg</a> (arm64 pour Apple Silicon, x64 pour Intel), glissez l'application dans Applications, puis faites clic droit › Ouvrir la première fois.</p>
+      <div class="first">
+        <div><h3>Au premier lancement</h3>
+          <ul><li>Autorisez le micro et la reconnaissance vocale quand macOS le demande.</li><li>L'application n'est pas notarisée par Apple : l'installateur retire l'avertissement pour vous.</li></ul></div>
+        <div><h3>Dans les Réglages</h3>
+          <ul><li>Votre nom, votre titre et votre parlement.</li><li>Votre moteur IA : une clé API, ou Ollama en local.</li><li>Le micro : activez-le, puis dites «&nbsp;Hé Jarvis&nbsp;».</li></ul></div>
+      </div>
+    </div>
   </section>
 
   <section id="faq" style="padding-top:10px">
-    <h2>Questions fréquentes</h2>
-    <div style="margin-top:30px">
-      <details><summary>Combien ça coûte ?</summary><p>Jarvis est gratuit et libre (licence MIT). Le moteur Claude se paie à l'usage, avec votre propre clé API Anthropic. Avec Ollama, un moteur local, tout est gratuit, mais la recherche web est moins fiable.</p></details>
-      <details><summary>Pourquoi macOS affiche-t-il un avertissement ?</summary><p>L'application n'est pas notarisée par Apple. L'installation par commande retire l'avertissement pour vous. Avec le .dmg, faites clic droit › Ouvrir la première fois.</p></details>
-      <details><summary>Jarvis peut-il envoyer des courriels sans moi ?</summary><p>Non. Un envoi n'a lieu qu'après votre clic dans une fenêtre de confirmation. Les comptes Google sont en lecture seule.</p></details>
-      <details><summary>Les modèles d'interpellation sont-ils officiels ?</summary><p>Ce sont des trames de travail, pas des formulaires officiels. Vérifiez toujours le règlement du parlement concerné avant le dépôt.</p></details>
-      <details><summary>Puis-je l'utiliser sur Windows ?</summary><p>Pas pour l'instant : Jarvis Parlement est conçu pour Mac.</p></details>
-      <details><summary>Comment mettre à jour ?</summary><p>Relancez la même commande : elle remplace l'application par la dernière version. Vos dossiers, votre cerveau et vos réglages sont conservés.</p></details>
+    <div class="wrap">
+      <h2>Questions fréquentes</h2>
+      <div style="margin-top:28px">
+        <details><summary>Combien ça coûte ?</summary><p>L'application est gratuite et libre (licence MIT). Les clés API d'Anthropic ou d'OpenAI sont facturées par ces fournisseurs, à l'usage. Avec Ollama, le moteur tourne sur votre Mac et ne coûte rien.</p></details>
+        <details><summary>Où vivent mes données ?</summary><p>Sur votre Mac. Les réglages, le cerveau et les dossiers sont dans un dossier de données de l'application ; vos documents sont dans Documents/Jarvis-Parlement. Mots de passe et clés sont chiffrés dans le trousseau macOS, sans télémétrie. Avec un moteur en ligne, un courriel ou un document n'est envoyé qu'avec votre accord ; avec Ollama, rien ne quitte le Mac.</p></details>
+        <details><summary>Mon parlement n'est pas dans la liste.</summary><p>Huit assemblées sont prêtes. Pour une autre, créez un parlement personnalisé : il reçoit son dossier et ses sous-dossiers, et vous y déposez vos modèles Word.</p></details>
+        <details><summary>Quelles langues ?</summary><p>Français, néerlandais et anglais : vous choisissez la langue par défaut dans votre profil, et vous pouvez en changer pour chaque texte.</p></details>
+        <details><summary>Pourquoi macOS parle-t-il d'un «&nbsp;développeur non identifié&nbsp;» ?</summary><p>L'application n'est pas notarisée par Apple. L'installation par commande retire l'avertissement. Avec le .dmg, faites clic droit › Ouvrir la première fois.</p></details>
+        <details><summary>Jarvis peut-il envoyer des courriels sans moi ?</summary><p>Non. Un envoi n'a lieu qu'après votre clic dans une fenêtre de confirmation qui montre le compte, les destinataires et le texte. La boîte est lue en lecture seule.</p></details>
+        <details><summary>Comment le mettre à jour ?</summary><p>Jarvis annonce lui-même les nouvelles versions et les installe d'un clic. Relancer la commande d'installation fonctionne aussi.</p></details>
+        <details><summary>Comment le désinstaller ?</summary><p>Quittez Jarvis et placez-le à la corbeille depuis le dossier Applications. Si vous voulez aussi effacer ses données, supprimez son dossier de données (indiqué dans Réglages) et, si vous le souhaitez, Documents/Jarvis-Parlement. Les clés enregistrées se retirent dans l'application Trousseau d'accès.</p></details>
+        <details><summary>Quelles sont les limites actuelles ?</summary><p>Jarvis ne fonctionne que sur macOS. Les modèles de textes sont des trames de travail, pas des formulaires officiels : vérifiez toujours le règlement du parlement concerné. Belga est en partie sous abonnement, et certains sites n'ont pas de flux public.</p></details>
+      </div>
     </div>
   </section>
-</div>
+  </div>
+</main>
 
 <footer>
   <div class="wrap">
     <span>Jarvis Parlement · licence MIT</span>
-    <span><a href="https://github.com/renaud-bxl/jarvis-parlement-Claude">Code source sur GitHub</a> · <a href="https://github.com/renaud-bxl/jarvis-parlement-Claude/releases">Versions</a></span>
+    <span><a href="https://github.com/renaud-bxl/jarvis-parlement-Claude">Code source sur GitHub</a> · <a href="https://github.com/renaud-bxl/jarvis-parlement-Claude/releases/latest">Télécharger</a></span>
   </div>
 </footer>
 
 <script>
-// Copier la commande
-function wireCopy(btnId, getText){
-  const b = document.getElementById(btnId); if(!b) return;
-  b.addEventListener('click', async () => {
-    const t = getText();
-    try { await navigator.clipboard.writeText(t); }
-    catch { const ta = document.createElement('textarea'); ta.value = t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); }
-    const old = b.textContent; b.textContent = 'Copié'; b.classList.add('ok');
-    setTimeout(() => { b.textContent = old; b.classList.remove('ok'); }, 2000);
-  });
-}
-const CMD = 'curl -fsSL https://raw.githubusercontent.com/renaud-bxl/jarvis-parlement-Claude/main/install.sh | bash';
-wireCopy('copyBtn', () => CMD); wireCopy('copyBtn2', () => CMD);
-
-// Hémicycle : un secteur par parlement
-const P = [
-  {n:'Parlement bruxellois', c:'#0b5cad', i:'Question d\'actualité, question orale, interpellation, question écrite, proposition de résolution'},
-  {n:'Parlement francophone bruxellois', c:'#4fa3e0', i:'Question orale, interpellation, question écrite, proposition de résolution'},
-  {n:'Chambre', c:'#2c3e73', i:'Question d\'actualité, question orale, interpellation, question écrite, proposition de résolution'},
-  {n:'Sénat', c:'#8a5a9e', i:'Demande d\'explications, question écrite, proposition de résolution'},
-  {n:'Parlement de Wallonie', c:'#c4552d', i:'Question d\'actualité, question orale, interpellation, question écrite, proposition de résolution'},
-  {n:'Fédération Wallonie-Bruxelles', c:'#2f8f6b', i:'Question d\'actualité, question orale, interpellation, question écrite, proposition de résolution'},
-  {n:'Parlement Benelux', c:'#e08a1e', i:'Question écrite (Benelux), proposition de recommandation'},
-  {n:'Parlement européen', c:'#6b7a96', i:'Question écrite à la Commission ou au Conseil, question avec demande de réponse orale'},
-];
-(function(){
-  const g = document.getElementById('seats'), NS = 'http://www.w3.org/2000/svg';
-  const cx = 320, cy = 326, rows = 8, r0 = 120, r1 = 300, seats = [];
-  for (let r = 0; r < rows; r++) {
-    const rad = r0 + (r1 - r0) * r / (rows - 1), n = Math.round(rad / 12.2);
-    for (let k = 0; k < n; k++) { const a = Math.PI * (1 - k / (n - 1)); seats.push({a, rad, x: cx + rad * Math.cos(a), y: cy - rad * Math.sin(a)}); }
+(function () {
+  var CMD = 'curl -fsSL https://raw.githubusercontent.com/renaud-bxl/jarvis-parlement-Claude/main/install.sh | bash';
+  function fallback(t) {
+    var ta = document.createElement('textarea');
+    ta.value = t; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    var ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove(); return ok;
   }
-  seats.sort((p, q) => q.a - p.a || p.rad - q.rad);
-  const per = seats.length / P.length;
-  seats.forEach((s, i) => s.g = Math.min(P.length - 1, Math.floor(i / per)));
-  const you = seats.filter(s => s.g === 0)[Math.floor(per * 0.55)];
-  const els = seats.map((s) => {
-    const c = document.createElementNS(NS, 'circle'); c.setAttribute('cx', s.x.toFixed(1)); c.setAttribute('cy', s.y.toFixed(1)); c.setAttribute('r', s === you ? 9 : 6.3);
-    c.setAttribute('class', 'seat' + (s === you ? ' you' : '')); if (s !== you) c.setAttribute('fill', P[s.g].c); c.dataset.g = s.g; g.appendChild(c); return c;
-  });
-  const lab = document.createElementNS(NS, 'text'); lab.setAttribute('x', you.x); lab.setAttribute('y', you.y - 17); lab.setAttribute('text-anchor', 'middle');
-  lab.setAttribute('font-family', 'Bricolage Grotesque, sans-serif'); lab.setAttribute('font-size', '19'); lab.setAttribute('font-weight', '700'); lab.setAttribute('fill', '#0a1f3f'); lab.textContent = 'vous'; g.appendChild(lab);
-
-  const hemi = document.getElementById('hemi'), legend = document.getElementById('legend'), panel = document.getElementById('panel');
-  const show = (i) => {
-    els.forEach(e => e.classList.toggle('on', i !== null && +e.dataset.g === i));
-    hemi.classList.toggle('dim', i !== null);
-    legend.querySelectorAll('button').forEach((b, k) => b.setAttribute('aria-pressed', k === i));
-    if (i === null) { panel.style.borderColor = '#0b5cad'; panel.innerHTML = '<b>Huit parlements, un seul fonctionnement.</b><span>Survolez un secteur : vous voyez les modèles qui changent.</span>'; }
-    else { panel.style.borderColor = P[i].c; panel.innerHTML = '<b>' + P[i].n + '</b><span>Modèles : ' + P[i].i + '.</span>'; }
-  };
-  P.forEach((p, i) => {
-    const b = document.createElement('button'); b.type = 'button'; b.setAttribute('aria-pressed', 'false'); b.innerHTML = '<i style="background:' + p.c + '"></i>' + p.n;
-    b.addEventListener('mouseenter', () => show(i)); b.addEventListener('focus', () => show(i)); b.addEventListener('click', () => show(i)); legend.appendChild(b);
-  });
-  els.forEach(e => e.addEventListener('mouseenter', () => show(+e.dataset.g)));
-  hemi.addEventListener('mouseleave', () => show(null));
-  show(null);
-
-  // Une seule animation : les sièges se remplissent à l'arrivée (désactivée si mouvement réduit).
-  if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
-    els.forEach((e, i) => { e.style.opacity = 0; setTimeout(() => { e.style.opacity = ''; }, 12 + i * 3); });
+  function wire(id) {
+    var b = document.getElementById(id); if (!b) return;
+    b.addEventListener('click', function () {
+      var done = function (ok) {
+        var old = b.getAttribute('data-l') || b.textContent; b.setAttribute('data-l', old);
+        b.textContent = ok ? 'Copié' : 'Copiez le texte'; if (ok) b.classList.add('ok'); else { try { var c = b.parentNode.querySelector('code'), r = document.createRange(); r.selectNodeContents(c); var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r); } catch (e) {} }
+        setTimeout(function () { b.textContent = old; b.classList.remove('ok'); }, 2200);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(CMD).then(function () { done(true); }, function () { done(fallback(CMD)); });
+      } else { done(fallback(CMD)); }
+    });
   }
+  wire('copyBtn'); wire('copyBtn2');
 })();
 </script>
 </body>
