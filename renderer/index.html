@@ -4,31 +4,34 @@
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' data: blob:; script-src 'self'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>Jarvis Parlement</title>
 <link rel="stylesheet" href="app.css">
 <link rel="stylesheet" href="jarvis.css">
 </head>
 <body>
+<a class="skip" href="#view" data-act="skipToContent">Aller au contenu</a>
 <div id="app">
   <aside id="side">
-    <div class="drag"></div>
+    <div class="drag" aria-hidden="true"></div>
     <div class="brand"><span class="logo">J</span><div><b>JARVIS</b><small>ESPACE PARLEMENTAIRE</small></div></div>
     <div class="parl-switch">
-      <label>Parlement actif</label>
-      <select id="activeParl"></select>
+      <label for="activeParl">Parlement actif</label>
+      <select id="activeParl" aria-label="Parlement actif"></select>
     </div>
-    <nav id="nav"></nav>
-    <div class="side-foot"><span id="aiBadge" class="badge"></span></div>
+    <nav id="nav" aria-label="Navigation principale"></nav>
+    <div class="side-foot"><span id="aiBadge" class="badge" role="status"></span></div>
   </aside>
-  <main id="main">
-    <div class="drag top"></div>
-    <div id="view"></div>
+  <main id="main" aria-label="Contenu">
+    <div class="drag top" aria-hidden="true"></div>
+    <div id="view" tabindex="-1"></div>
   </main>
 </div>
 <div id="modal-root"></div>
-<div id="toasts"></div>
+<div id="toasts" role="status" aria-live="polite" aria-atomic="false"></div>
 <script src="ui.js"></script>
 <script src="mail-ui.js"></script>
+<script src="mailbox-ui.js"></script>
 <script src="pages-core.js"></script>
 <script src="pages-work.js"></script>
 <script src="pages-system.js"></script>

@@ -4,45 +4,89 @@ const NAV = [
   ['documents', 'Documents', 'file'], ['courriels', 'Courriels', 'mail'], ['agenda', 'Agenda', 'cal'], ['veille', 'Veille', 'eye'], ['assistant', 'Assistant', 'chat'],
   'sep', ['parlements', 'Parlements', 'bank'], ['cerveau', 'Cerveau', 'brain'], ['reglages', 'Réglages', 'gear'], ['diagnostic', 'Diagnostic', 'pulse'],
 ];
+const TITLES = Object.fromEntries(NAV.filter((n) => n !== 'sep').map((n) => [n[0], n[1]]));
 
 J.go = (page, arg) => { location.hash = '#' + page + (arg ? '/' + arg : ''); };
 
-async function render() {
+// Mise en route : 4 étapes calculées à partir de l'état réel (profil, moteur IA testé, voix, micro).
+J.onb = () => {
+  const s = J.S, o = s.onboarding || {};
+  const steps = [
+    { id: 'profil', label: 'Ton profil', hint: 'Nom, titre et signature des textes.', done: !!String(s.profile.nom || '').trim() },
+    { id: 'ia', label: 'Moteur IA', hint: s._env.configured ? 'Configuré : il reste à le tester.' : 'Choisis un moteur et colle ta clé (ou utilise Ollama, gratuit et local).', done: !!o.aiOk && !!s._env.configured },
+    { id: 'voix', label: 'Voix de Jarvis', hint: 'Une voix humaine, gratuite et hors-ligne (≈ 21 Mo).', done: (s.voice.engine === 'piper' && !!s._env.piperReady) || !!o.voiceSystem },
+    { id: 'micro', label: 'Micro et reconnaissance vocale', hint: 'Pour dicter et parler à Jarvis.', done: !!o.micOk },
+  ];
+  const n = steps.filter((x) => x.done).length;
+  return { steps, n, all: n === steps.length, dismissed: !!(o.dismissed || o.done) };
+};
+
+async function render(keep) {
+  const keepTop = keep === true ? document.getElementById('main').scrollTop : 0;
   const [page, arg] = (location.hash.slice(1) || 'accueil').split('/');
-  if (J.leave) J.leave();
+  const token = (render.token = (render.token || 0) + 1);
+  try { if (J.leave) J.leave(); } catch (e) { console.warn(e); }
+  J.closeModal && document.querySelector('#modal-root .modal') && J.closeModal();
   const fn = J.pages[page] || J.pages.accueil;
-  J.$$('#nav a').forEach((a) => a.classList.toggle('on', a.dataset.page === page));
-  const root = document.getElementById('view');
-  root.innerHTML = '<div class="muted">Chargement…</div>';
-  try { await fn(root, arg); } catch (e) { root.innerHTML = `<div class="card"><h2>Erreur</h2><p>${J.esc(e.message)}</p></div>`; console.error(e); }
-  document.getElementById('main').scrollTop = 0;
+  const cur = J.pages[page] ? page : 'accueil';
+  J.$$('#nav a').forEach((a) => { const on = a.dataset.page === cur; a.classList.toggle('on', on); if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current'); });
+  document.title = (TITLES[cur] || 'Jarvis') + ' — Jarvis Parlement';
+  const view = document.getElementById('view');
+  const root = document.createElement('div'); root.className = 'page'; root.dataset.page = cur;
+  view.replaceChildren(root); view.setAttribute('aria-busy', 'true');
+  // Squelette seulement si la page tarde (évite un clignotement).
+  const timer = setTimeout(() => { if (token === render.token && !root.childElementCount) root.innerHTML = cur === 'accueil' ? '' : J.skeleton(); }, 140);
+  try { await fn(root, arg); }
+  catch (e) {
+    console.error(e);
+    if (token === render.token) root.innerHTML = `<div class="empty err" role="alert"><b>Cette page n'a pas pu s'afficher</b>${J.esc(J.errMsg(e))}<div class="row"><button class="pri" data-act="reload">Réessayer</button><a class="btn" href="#accueil">Retour à Jarvis</a></div></div>`;
+  } finally { clearTimeout(timer); }
+  if (token !== render.token) return;
+  view.removeAttribute('aria-busy');
+  J.a11y(root);
+  document.getElementById('main').scrollTop = keepTop;
+  if (cur !== 'accueil' && !root.contains(document.activeElement)) view.focus({ preventScroll: true });
 }
-J.render = render;
+J.render = () => render(true);
+J.act.reload = () => location.reload();
 
 function drawChrome() {
-  document.getElementById('nav').innerHTML = NAV.map((n) => n === 'sep' ? '<div class="sep"></div>' : `<a data-page="${n[0]}" href="#${n[0]}">${J.icon(n[2])}${n[1]}</a>`).join('');
+  document.getElementById('nav').innerHTML = NAV.map((n) => n === 'sep' ? '<div class="sep" role="separator"></div>' : `<a data-page="${n[0]}" href="#${n[0]}">${J.icon(n[2])}${n[1]}</a>`).join('');
+  const cur = (location.hash.slice(1) || 'accueil').split('/')[0];
+  J.$$('#nav a').forEach((a) => { if (a.dataset.page === cur) { a.classList.add('on'); a.setAttribute('aria-current', 'page'); } });
   const sel = document.getElementById('activeParl');
   sel.innerHTML = J.P.parlements.filter((p) => J.P.actifs.includes(p.id)).map((p) => `<option value="${p.id}" ${p.id === J.P.actif ? 'selected' : ''}>${J.esc(p.nom)}</option>`).join('');
+  sel.title = J.parlName(J.P.actif);
   const b = document.getElementById('aiBadge'), env = J.S._env;
   b.className = 'badge' + (env.configured ? ' ok' : '');
-  b.innerHTML = `<i></i>${env.configured ? (env.local ? 'IA locale prête' : 'IA cloud prête') : 'IA non configurée'}`;
+  b.innerHTML = `<i aria-hidden="true"></i>${env.configured ? (env.local ? 'IA locale prête' : 'IA cloud prête') : 'IA non configurée'}`;
+  // Rappel discret tant que la mise en route n'est pas terminée.
+  const foot = document.querySelector('.side-foot'); foot.querySelector('.setup-hint')?.remove();
+  const o = J.onb();
+  if (!o.dismissed && !o.all) foot.insertAdjacentHTML('afterbegin', `<a class="setup-hint" href="#reglages/miseenroute">Mise en route : ${o.n}/4 · continuer</a>`);
 }
 J.drawChrome = drawChrome;
 
 document.getElementById('activeParl').addEventListener('change', async (e) => {
-  await J.call('parlements.setActive', { id: e.target.value });
-  await J.refreshMeta(); drawChrome(); render();
+  try { await J.call('parlements.setActive', { id: e.target.value }); await J.refreshMeta(); drawChrome(); render(true); } catch (err) { J.err(err); }
 });
-window.addEventListener('hashchange', render);
+window.addEventListener('hashchange', () => render());
+
+// Accessibilité des fragments ajoutés après le rendu (résultats, fenêtres) : libellés et rôles.
+let a11yT = null;
+new MutationObserver(() => { clearTimeout(a11yT); a11yT = setTimeout(() => J.a11y(document.getElementById('view')), 60); }).observe(document.getElementById('view'), { childList: true, subtree: true });
 
 window.jarvis.on('navigate', (p) => J.go(p));
-window.jarvis.on('brain-updated', (d) => { if (d.added) J.toast('🧠 Jarvis a retenu ' + d.added + ' nouvelle préférence' + (d.added > 1 ? 's' : ''), 'ok'); if (location.hash.startsWith('#cerveau')) render(); });
-window.jarvis.on('veille-done', (d) => { J.toast(d.title + ' — ' + d.body, 'ok'); if (location.hash.startsWith('#veille')) render(); });
+window.jarvis.on('brain-updated', (d) => { if (d.added) J.toast('Jarvis a retenu ' + d.added + ' nouvelle préférence' + (d.added > 1 ? 's' : ''), 'ok'); if (location.hash.startsWith('#cerveau')) render(true); });
+window.jarvis.on('veille-done', (d) => { J.toast(d.title + ' — ' + d.body, 'ok'); if (location.hash.startsWith('#veille')) render(true); });
 window.jarvis.on('progress', (d) => { J.state.progress = d.label; const el = document.getElementById('progress'); if (el) el.textContent = d.label; });
+window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); });
 
 (async () => {
-  await J.refreshMeta();
+  try { await J.refreshMeta(); } catch (e) { document.getElementById('view').innerHTML = `<div class="empty err" role="alert"><b>Jarvis n'a pas pu démarrer</b>${J.esc(J.errMsg(e))}<div class="row"><button class="pri" data-act="reload">Relancer</button></div></div>`; return; }
   drawChrome();
-  if (!J.S.firstRunDone && !location.hash) location.hash = '#reglages';
+  // Premier lancement : le parcours « Mise en route » s'ouvre dans Réglages.
+  const o = J.onb();
+  if (!location.hash && !J.S.firstRunDone && !o.dismissed && !o.all) location.hash = '#reglages/miseenroute';
   render();
 })();

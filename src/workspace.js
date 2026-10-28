@@ -18,12 +18,14 @@ const FIXED = {
   'bxl-pb': 'Parlement-Bruxelles', 'bxl-pfb': 'Parlement-Francophone-Bruxellois', 'be-chambre': 'Chambre-des-Representants', 'be-senat': 'Senat',
   wallon: 'Parlement-Wallonie', fwb: 'Parlement-Federation-Wallonie-Bruxelles', benelux: 'Parlement-Benelux', pe: 'Parlement-Europeen',
 };
-const slug = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '');
+// Nom de fichier/dossier sûr : lettres latines et chiffres uniquement (aucun séparateur, point, caractère nul ou Unicode exotique).
+const slug = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+function safeName(name, max = 60) { return slug(name).slice(0, max).replace(/-+$/, '') || 'document'; }
 
 function folderName(parlementId) {
   if (FIXED[parlementId]) return FIXED[parlementId];
   const p = templates.all().parlements.find((x) => x.id === parlementId);
-  const n = slug(p ? p.nom : parlementId);
+  const n = slug(p ? p.nom : parlementId).slice(0, 80) || 'Autre';
   return n.startsWith('Parlement') ? n : 'Parlement-' + n;
 }
 
@@ -44,16 +46,22 @@ function ensureAll() {
 }
 
 // Sauvegarde un document produit par Jarvis dans le bon sous-dossier du parlement. Ne lève jamais d'erreur bloquante.
+// Ne remplace jamais un fichier existant (numéro -2, -3… en cas d'homonyme) et reste strictement sous la racine de travail.
 function save(parlementId, sub, name, content) {
   try {
-    if (!parlementId) parlementId = store.settings.get().profile.parlements[0];
+    if (!parlementId || typeof parlementId !== 'string') parlementId = store.settings.get().profile.parlements[0];
     if (!parlementId) return null;
-    const dir = path.join(ensure(parlementId), SUBS[sub] || sub);
+    if (!Object.prototype.hasOwnProperty.call(SUBS, sub)) return null;
+    const dir = path.join(ensure(parlementId), SUBS[sub]);
     const stamp = new Date().toISOString().slice(0, 10);
-    const file = path.join(dir, `${stamp}_${slug(name).slice(0, 60) || 'document'}.md`);
-    fs.writeFileSync(file, content);
-    return file;
-  } catch { return null; }
+    const base = `${stamp}_${safeName(name)}`;
+    let file = path.join(dir, base + '.md');
+    for (let n = 2; ; n++) {
+      if (path.relative(ROOT, file).startsWith('..')) return null;
+      try { fs.writeFileSync(file, String(content == null ? '' : content), { flag: 'wx', mode: 0o600 }); return file; }
+      catch (e) { if (e.code !== 'EEXIST' || n > 500) throw e; file = path.join(dir, `${base}-${n}.md`); }
+    }
+  } catch (e) { console.error('workspace.save :', e.code || e.message); return null; }
 }
 
 function info() {
@@ -61,4 +69,4 @@ function info() {
   return { root: ROOT, parlements: ids.map((id) => ({ id, name: folderName(id), path: path.join(ROOT, folderName(id)), exists: fs.existsSync(path.join(ROOT, folderName(id))) })) };
 }
 
-module.exports = { ROOT, SUBS, folderName, ensure, ensureAll, save, info };
+module.exports = { ROOT, SUBS, folderName, ensure, ensureAll, save, info, safeName };

@@ -87,7 +87,8 @@
     const out = $('jvOut'); if (!out) return;
     const parts = [];
     if (res.md) parts.push(`<div class="jv-card"><div class="row sp"><b>${J.esc(titleFor(res.intent))}</b><span class="row">${res.readAloud ? `<button class="sm" data-act="jvRead">🔊 Lire le texte</button>` : ''}<button class="sm ghost" data-act="jvCopy">Copier</button></span></div><div id="jvMd">${J.md(res.md)}</div></div>`);
-    if (res.messages && res.messages.length && !res.replyTo) {
+    if (res.triage && J.mbSectionsHtml) parts.push(`<div class="jv-card jv-tri">${J.mbSectionsHtml(res.triage)}</div>`);
+    else if (res.messages && res.messages.length && !res.replyTo) {
       H.mails = res.messages;
       parts.push(`<div class="jv-card"><div class="row sp"><b>${res.messages.length} message${res.messages.length > 1 ? 's' : ''}</b><span class="row"><button class="sm" data-act="jvMailAll">🔊 Lire tous</button><button class="sm ghost" data-act="jvMailStop">⏹</button></span></div>` + res.messages.map((m, i) => `<div class="jv-mail" id="jm${i}"><div class="grow"><b>${J.esc(m.subject)}</b>${m.unread ? ' <span class="pill gold">non lu</span>' : ''}<div class="muted small">${J.esc(J.nameOf(m.from))} · ${J.esc(m.date ? J.fmtDate(m.date) : '')}</div><div class="small">${J.esc((m.text || '').replace(/\s+/g, ' ').slice(0, 140))}…</div></div><span class="row"><button class="sm" data-act="jvMailRead" data-i="${i}">🔊 Lire</button><button class="sm" data-act="jvMailShow" data-i="${i}">👁 Afficher</button><button class="sm pri" data-act="jvMailReply" data-i="${i}">↩ Répondre</button></span></div>`).join('') + '</div>');
     }

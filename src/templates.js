@@ -70,14 +70,18 @@ const PARLEMENTS = [
 
 function all() {
   const t = store.read('templates', { custom: [], parlements: [] });
-  return { parlements: [...PARLEMENTS, ...(t.parlements || [])], custom: t.custom || [] };
+  const okP = (p) => p && typeof p === 'object' && typeof p.id === 'string' && Array.isArray(p.instruments);
+  return { parlements: [...PARLEMENTS, ...(Array.isArray(t.parlements) ? t.parlements.filter(okP) : [])], custom: Array.isArray(t.custom) ? t.custom.filter((c) => c && typeof c.id === 'string') : [] };
 }
 
 // Ajoute un parlement personnalisé en clonant les instruments d'un parlement existant (modifiables ensuite via les modèles personnalisés).
 function addParlement({ nom, niveau, baseOn }) {
-  nom = String(nom || '').trim(); if (!nom) throw new Error('Nom du parlement requis.');
+  nom = String(nom || '').trim().slice(0, 100); if (!nom) throw new Error('Nom du parlement requis.');
+  niveau = String(niveau || '').trim().slice(0, 60);
   const t = store.read('templates', { custom: [], parlements: [] });
-  const id = 'p_' + nom.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30);
+  if (!Array.isArray(t.parlements)) t.parlements = [];
+  if (t.parlements.length >= 50) throw new Error('Nombre maximal de parlements personnalisés atteint (50).');
+  const id = 'p_' + (nom.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 30) || store.uid('x').slice(2));
   if ([...PARLEMENTS, ...(t.parlements || [])].some((p) => p.id === id)) throw new Error('Ce parlement existe déjà.');
   const base = [...PARLEMENTS, ...(t.parlements || [])].find((p) => p.id === baseOn) || PARLEMENTS[0];
   const p = { id, nom, niveau: niveau || 'Personnalisé', custom: true, sources: [], instruments: base.instruments.map((i) => ({ ...JSON.parse(JSON.stringify(i)), id: id + '-' + i.id.split('-').slice(2).join('-'), notes: (i.notes || '') + ' Modèle copié de « ' + base.nom + ' » : adapte-le au règlement de ' + nom + '.' })) };
@@ -94,12 +98,21 @@ function find(instrumentId) {
   return null;
 }
 
+const clipS = (v, n) => String(v == null ? '' : v).slice(0, n);
 function saveCustom(tpl) {
-  if (!tpl.label || !tpl.parlementNom) throw new Error('Nom du parlement et du modèle requis.');
+  if (!tpl || typeof tpl !== 'object') throw new Error('Modèle invalide.');
+  const label = clipS(tpl.label, 200).trim(), parlementNom = clipS(tpl.parlementNom, 100).trim();
+  if (!label || !parlementNom) throw new Error('Nom du parlement et du modèle requis.');
+  if (tpl.id !== undefined && tpl.id !== '' && !/^tpl_[a-f0-9]{6,20}$/.test(String(tpl.id))) throw new Error('Identifiant de modèle invalide.');
   const t = store.read('templates', { custom: [] });
-  const item = { id: tpl.id || store.uid('tpl'), label: tpl.label, parlementNom: tpl.parlementNom, parlementId: 'custom', mode: tpl.mode || 'écrit', recipient: tpl.recipient || '', tone: tpl.tone || '', lengthHint: tpl.lengthHint || '', notes: tpl.notes || '',
-    sections: String(tpl.sections || '').split('\n').map((s) => s.trim()).filter(Boolean).map((l) => { const [nom, ...g] = l.split(':'); return { nom: nom.trim(), guide: g.join(':').trim() }; }),
-    skeleton: tpl.skeleton || '' };
+  if (!Array.isArray(t.custom)) t.custom = [];
+  const id = tpl.id || store.uid('tpl');
+  if (!t.custom.some((x) => x.id === id) && t.custom.length >= 300) throw new Error('Nombre maximal de modèles atteint (300).');
+  const secs = clipS(tpl.sections, 6000).split('\n').map((x) => x.trim()).filter(Boolean).slice(0, 30);
+  const item = { id, label, parlementNom, parlementId: 'custom', mode: clipS(tpl.mode || 'écrit', 40), recipient: clipS(tpl.recipient, 200), tone: clipS(tpl.tone, 200), lengthHint: clipS(tpl.lengthHint, 200),
+    notes: clipS(tpl.notes, 2000),
+    sections: secs.map((l) => { const [nom, ...g] = l.split(':'); return { nom: nom.trim(), guide: g.join(':').trim() }; }),
+    skeleton: clipS(tpl.skeleton, 20000) };
   const i = t.custom.findIndex((x) => x.id === item.id);
   if (i >= 0) t.custom[i] = item; else t.custom.push(item);
   store.write('templates', t); return item;

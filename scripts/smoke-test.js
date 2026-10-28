@@ -1,6 +1,7 @@
 // Test de fumée du backend (sans réseau : fetch est simulé). Lancer : npm test
 const fs = require('fs'); const os = require('os'); const path = require('path'); const assert = require('assert');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-'));
+process.env.JARVIS_INSECURE_SECRETS = '1'; // hors Electron il n'y a pas de trousseau : encodage de test autorisé uniquement ici
 process.env.JARVIS_DATA_DIR = path.join(tmp, 'data'); process.env.JARVIS_DOCS_DIR = path.join(tmp, 'Jarvis-Parlement');
 
 let lastBody = null;
@@ -99,5 +100,7 @@ const research = require('../src/research'); const mail = require('../src/mail')
   const eml = mail.buildEml({ from: 'moi@exemple.be', to: 'j@x.be', subject: 'Re : Test', body: 'ok', inReplyTo: '<1@x>', references: '<1@x>' }); assert(/In-Reply-To: <1@x>/.test(eml) && /References: <1@x>/.test(eml)); ok('le .eml de réponse garde In-Reply-To / References');
   const jv2 = require('../src/jarvis'); assert.strictEqual(jv2.fastRoute('lis-moi tous les mails').intent, 'mails_read'); assert.strictEqual(jv2.fastRoute('réponds au premier mail en disant que je confirme').args.instruction, 'je confirme'); assert.strictEqual(jv2.fastRoute('lis le deuxième mail').args.index, 2); ok('commandes vocales : « lis tous les mails », « lis le deuxième », « réponds au premier… »');
   const rd = await research.replyDraft({ message: { from: 'Jean <j@x.be>', subject: 'RDV', text: 'Peux-tu venir ?' }, instruction: 'je confirme', allowCloud: true }); assert(rd.text); ok('réponse proposée par Jarvis');
+  console.log('\n— Tests du cœur (sécurité, robustesse, consentement) —');
+  await require('./test-core')({ ok, tmp });
   console.log('\nTous les tests passent ✅'); fs.rmSync(tmp, { recursive: true, force: true });
 })().catch((e) => { console.error('\n❌ ÉCHEC :', e); process.exit(1); });

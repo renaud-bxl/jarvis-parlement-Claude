@@ -3,9 +3,15 @@
 // ÉCOUTER : reconnaissance vocale macOS (gratuite) ou Whisper via une API compatible OpenAI.
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
 const { execFile, spawn } = require('child_process');
+const { Readable, Transform } = require('stream');
+const { pipeline } = require('stream/promises');
 const store = require('./store');
+
+// Dossier temporaire PRIVÉ (0700) : les fichiers audio (voix de l'utilisateur, textes lus) ne traînent pas dans /tmp lisible par tous.
+const tmpDir = () => { const d = path.join(store.DIR, 'tmp'); fs.mkdirSync(d, { recursive: true, mode: 0o700 }); return d; };
+function cleanTmp() { try { const d = tmpDir(); for (const n of fs.readdirSync(d)) { const f = path.join(d, n); if (Date.now() - fs.statSync(f).mtimeMs > 600e3) fs.rmSync(f, { force: true }); } } catch { /* ok */ } }
+cleanTmp();
 
 const MODELS_URL = 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models';
 const VOICES = [
@@ -35,32 +41,48 @@ function status() {
   };
 }
 
+const MAX_VOICE_BYTES = 250 * 1024 * 1024;
+const DOWNLOAD_HOSTS = /(^|\.)(github\.com|githubusercontent\.com)$/i;
 async function download(url, dest, onProgress) {
-  const res = await fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`Téléchargement impossible (${res.status}) : ${url}`);
+  const u = new URL(url);
+  if (u.protocol !== 'https:' || !DOWNLOAD_HOSTS.test(u.hostname)) throw new Error('Source de téléchargement refusée.');
+  let res;
+  try { res = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(15 * 60 * 1000) }); }
+  catch (e) { throw new Error('Téléchargement impossible : vérifie ta connexion Internet (' + (e.cause?.code || e.message) + ').'); }
+  if (!res.ok || !res.body) throw new Error(`Téléchargement impossible (${res.status}) : ${url}`);
+  if (res.url && !DOWNLOAD_HOSTS.test(new URL(res.url).hostname)) throw new Error('Redirection vers un serveur non autorisé.');
   const total = Number(res.headers.get('content-length')) || 0; let got = 0;
+  if (total > MAX_VOICE_BYTES) throw new Error('Fichier de voix anormalement volumineux : téléchargement annulé.');
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  const tmp = dest + '.part'; const out = fs.createWriteStream(tmp);
-  for await (const chunk of res.body) { out.write(chunk); got += chunk.length; if (onProgress && total) onProgress(got / total); }
-  await new Promise((r) => out.end(r));
+  const tmp = dest + '.part';
+  const counter = new Transform({ transform(chunk, _e, cb) { got += chunk.length; if (got > MAX_VOICE_BYTES) return cb(new Error('Fichier de voix anormalement volumineux : téléchargement annulé.')); if (onProgress && total) onProgress(got / total); cb(null, chunk); } });
+  try { await pipeline(Readable.fromWeb(res.body), counter, fs.createWriteStream(tmp, { mode: 0o600 })); }
+  catch (e) { fs.rmSync(tmp, { force: true }); throw e; }
   fs.renameSync(tmp, dest);
 }
 
 const run = (cmd, args, opts) => new Promise((res, rej) => execFile(cmd, args, opts, (e, so, se) => (e ? rej(new Error(se || e.message)) : res(so))));
 
 // Télécharge la voix choisie (≈ 21 Mo) si absente, puis l'active.
+const installing = new Set();
 async function install(voiceId, emit = () => {}) {
   const v = VOICES.find((x) => x.id === voiceId); if (!v) throw new Error('Voix inconnue.');
   if (!speakBin()) throw new Error("Le moteur vocal n'est pas inclus dans cette version de l'app (réinstalle la dernière version).");
-  if (!hasModel(v)) {
-    const tgz = path.join(vdir(), v.model + '.tar.bz2');
-    await download(`${MODELS_URL}/${v.model}.tar.bz2`, tgz, (p) => emit('progress', { label: `Voix ${v.label} : ${Math.round(p * 100)} %` }));
-    emit('progress', { label: `Voix ${v.label} : installation…` });
-    fs.mkdirSync(path.join(vdir(), 'models'), { recursive: true });
-    await run('tar', ['-xjf', tgz, '-C', path.join(vdir(), 'models')]);
-    fs.rmSync(tgz, { force: true });
-    if (!hasModel(v)) throw new Error('Voix introuvable après extraction.');
-  }
+  if (installing.has(v.model)) throw new Error('Cette voix est déjà en cours de téléchargement.');
+  installing.add(v.model);
+  const tgz = path.join(vdir(), v.model + '.tar.bz2');
+  try {
+    if (!hasModel(v)) {
+      await download(`${MODELS_URL}/${v.model}.tar.bz2`, tgz, (p) => emit('progress', { label: `Voix ${v.label} : ${Math.round(p * 100)} %` }));
+      emit('progress', { label: `Voix ${v.label} : installation…` });
+      fs.mkdirSync(path.join(vdir(), 'models'), { recursive: true });
+      // Refuse toute archive contenant un chemin absolu ou « .. » (extraction hors du dossier voix).
+      const listing = await run('tar', ['-tjf', tgz], { maxBuffer: 16 * 1024 * 1024 });
+      if (String(listing).split('\n').some((l) => l.startsWith('/') || l.split('/').includes('..'))) throw new Error('Archive de voix refusée (chemins suspects).');
+      await run('tar', ['-xjf', tgz, '-C', path.join(vdir(), 'models')]);
+      if (!hasModel(v)) throw new Error('Voix introuvable après extraction.');
+    }
+  } finally { fs.rmSync(tgz, { force: true }); fs.rmSync(tgz + '.part', { force: true }); installing.delete(v.model); }
   fs.rmSync(path.join(vdir(), 'piper'), { recursive: true, force: true }); // ancien moteur (inutilisable) d'une version précédente
   store.settings.set({ voice: { engine: 'piper', piperVoice: v.id } });
   return status();
@@ -83,6 +105,7 @@ function engineFor(v) {
   const fail = (msg) => { e.dead = true; engines.delete(v.id); for (const w of e.waiters.splice(0)) w.reject(new Error(msg)); };
   proc.stdout.on('data', (d) => { e.buf += d; let i; while ((i = e.buf.indexOf('\n')) >= 0) { const line = e.buf.slice(0, i).trim(); e.buf = e.buf.slice(i + 1); const w = e.waiters.shift(); if (w) (line === 'READY' || line === 'OK') ? w.resolve() : w.reject(new Error(line.replace(/^ERR /, ''))); } });
   proc.stderr.on('data', (d) => { e.err = (e.err + d).slice(-300); });
+  proc.stdin.on('error', (er) => fail('Moteur vocal : ' + er.message));
   proc.on('error', (er) => fail('Moteur vocal : ' + er.message));
   proc.on('close', () => fail('Le moteur vocal s\'est arrêté. ' + e.err.trim().slice(-150)));
   e.ready = new Promise((resolve, reject) => { e.waiters.push({ resolve, reject }); });
@@ -98,7 +121,7 @@ function synth(text) {
   const e = engineFor(v);
   const job = e.queue.then(async () => {
     await Promise.race([e.ready, new Promise((_r, rej) => setTimeout(() => rej(new Error('Chargement de la voix trop long.')), 30000))]);
-    const out = path.join(os.tmpdir(), `jarvis-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.wav`);
+    const out = path.join(tmpDir(), `jarvis-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}.wav`);
     const done = new Promise((resolve, reject) => { e.waiters.push({ resolve, reject }); });
     e.proc.stdin.write(`${rate}\t${out}\t${clean}\n`);
     const timer = setTimeout(() => { try { e.proc.kill(); } catch { /* ok */ } }, 60000);
@@ -126,7 +149,7 @@ const engine = () => { const v = store.settings.get().voice; return v.stt === 'w
 const configured = () => !!engine();
 
 function transcribeMacos(buf, lang) {
-  const f = path.join(os.tmpdir(), `jarvis-stt-${process.pid}-${Date.now()}.wav`); fs.writeFileSync(f, buf);
+  const f = path.join(tmpDir(), `jarvis-stt-${process.pid}-${Date.now()}.wav`); fs.writeFileSync(f, buf, { mode: 0o600 });
   return new Promise((resolve, reject) => {
     execFile(listenBin(), [f, lang === 'nl' ? 'nl-BE' : lang === 'en' ? 'en-GB' : 'fr-FR'], { timeout: 95000 }, (e, so, se) => {
       fs.rmSync(f, { force: true });
@@ -136,23 +159,33 @@ function transcribeMacos(buf, lang) {
   });
 }
 
-async function transcribe({ audio, mime }) {
+async function transcribe({ audio, mime } = {}) {
   const v = store.settings.get().voice; const st = store.settings.get();
   const eng = engine();
   if (!eng) throw new Error("Aucune reconnaissance vocale disponible (Réglages › Voix). En attendant, utilise la dictée macOS : appuie deux fois sur Fn.");
+  if (typeof audio !== 'string' || !audio) throw new Error('Enregistrement vide.');
+  if (audio.length > 34 * 1024 * 1024) throw new Error("Enregistrement trop long (25 Mo maximum) : parle par phrases plus courtes.");
   const buf = Buffer.from(audio, 'base64');
   if (buf.length < 1500) throw new Error('Enregistrement trop court.');
+  mime = typeof mime === 'string' ? mime.slice(0, 60) : '';
   if (eng === 'macos') return transcribeMacos(buf, st.profile.langue);
+  let url; try { url = new URL(v.sttUrl); } catch { throw new Error("Adresse du serveur de transcription invalide (Réglages › Voix)."); }
+  const key = store.getSecret('stt_key');
+  const loop = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname);
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loop)) throw new Error("Le serveur de transcription doit utiliser https:// (ou tourner sur cet ordinateur).");
   const ext = /wav/.test(mime) ? 'wav' : /mp4|m4a/.test(mime) ? 'm4a' : /ogg/.test(mime) ? 'ogg' : 'webm';
   const form = new FormData();
   form.append('file', new Blob([buf], { type: mime || 'audio/webm' }), `voix.${ext}`);
   form.append('model', v.sttModel || 'whisper-1'); form.append('language', st.profile.langue || 'fr'); form.append('response_format', 'json');
-  const key = store.getSecret('stt_key'); let res;
-  try { res = await fetch(v.sttUrl.replace(/\/$/, '') + '/audio/transcriptions', { method: 'POST', headers: key ? { authorization: 'Bearer ' + key } : {}, body: form }); }
-  catch (e) { throw new Error('Serveur de transcription injoignable : ' + (e.cause?.code || e.message)); }
-  const txt = await res.text(); let j = null; try { j = JSON.parse(txt); } catch { /* brut */ }
-  if (!res.ok) throw new Error(`Transcription refusée (${res.status}) : ${j?.error?.message || txt.slice(0, 200)}`);
-  return { text: (j?.text ?? txt).trim() };
+  let res;
+  try { res = await fetch(v.sttUrl.replace(/\/$/, '') + '/audio/transcriptions', { method: 'POST', headers: key ? { authorization: 'Bearer ' + key } : {}, body: form, redirect: 'error', signal: AbortSignal.timeout(90000) }); }
+  catch (e) { throw new Error('Serveur de transcription injoignable (' + (e.name === 'TimeoutError' ? 'délai dépassé' : (e.cause?.code || e.message)) + '). Vérifie ta connexion et l\'adresse dans Réglages › Voix.'); }
+  const txt = (await res.text()).slice(0, 2 * 1024 * 1024); let j = null; try { j = JSON.parse(txt); } catch { /* brut */ }
+  if (!res.ok) throw new Error(`Transcription refusée (${res.status}) : ${String(j?.error?.message || txt).slice(0, 200).replace(/sk-[A-Za-z0-9_-]+/g, '…')}`);
+  return { text: String(j?.text ?? txt).trim() };
 }
 
-module.exports = { VOICES, piperReady, status, install, removeVoice, synth, stopEngines, configured, engine, macosReady, transcribe };
+// Chemins des moteurs natifs (diagnostic).
+const binaries = () => ({ speak: speakBin() || null, listen: listenBin() || null });
+
+module.exports = { VOICES, binaries, piperReady, status, install, removeVoice, synth, stopEngines, configured, engine, macosReady, transcribe };

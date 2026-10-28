@@ -63,3 +63,4 @@
 .jv-conv{margin-top:8px;font-size:12.5px;color:#8ea6d6;display:flex;align-items:center}
 @media (prefers-reduced-motion:reduce){.jv-hello>div,.jv-lines li,.jv-chips button,.orb-btn{transition:none}}
 @media (max-width:1100px){.jv-hello .h1{font-size:40px}.jv-bar{flex-wrap:wrap}}
+.jv-tri{max-height:52vh}.jv-tri .mb-card{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:#eaf1ff}.jv-tri .mb-m,.jv-tri .mb-sd{color:#9db3d8}.jv-tri .mb-pill{background:rgba(255,255,255,.07);color:#eaf1ff;border-color:rgba(255,255,255,.22);cursor:default}.jv-tri .mb-pill b{background:rgba(255,255,255,.16);color:#fff}.jv-tri .mb-pill.hot b{background:#ffd21f;color:#0a1f3f}.jv-tri .mb-ev{background:rgba(79,143,240,.16);border-color:rgba(120,170,255,.4)}.jv-tri .mb-why{background:rgba(255,159,28,.18);color:#ffe2b0}
