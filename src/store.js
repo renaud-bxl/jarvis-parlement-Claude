@@ -23,6 +23,7 @@ const DEFAULT_SETTINGS = {
   google: { clientId: '', accounts: [] },
   mail: { accounts: [], briefingIncludesMail: false, watch: true, watchMinutes: 3, notifyPreview: true, followDays: 7, vip: [] },
   brain: { learning: true },
+  onboarding: { aiOk: false, micOk: false, speechOk: false, dismissed: false, done: false },
   voice: { engine: 'piper', piperVoice: 'siwis', ttsVoice: '', ttsRate: 1, autoSpeak: false, stt: 'macos', sttUrl: 'https://api.openai.com/v1', sttModel: 'whisper-1' },
   jarvis: { cloudMailOk: false, converse: false },
   firstRunDone: false,

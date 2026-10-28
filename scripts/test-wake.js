@@ -41,5 +41,15 @@ ok('pas de faux réveil : conversations voisines, « Jarvis » au milieu d\'une 
   await assert.rejects(() => voice.transcribe({ audio: wav, mime: 'audio/wav', offline: true }), /hors-ligne du français n'est pas installée/); ok('reconnaissance hors-ligne absente : message clair, jamais de repli vers les serveurs d\'Apple');
   fs.writeFileSync(path.join(res, 'jarvis-listen'), '#!/bin/sh\necho "AUTORISATION_REFUSEE" 1>&2\nexit 3\n', { mode: 0o755 });
   await assert.rejects(() => voice.transcribe({ audio: wav, mime: 'audio/wav', offline: true }), /Reconnaissance vocale refusée/); ok('autorisation macOS refusée : message avec le chemin des Réglages Système');
+  // ---- Assistant de mise en route : les étapes cochées sont bien enregistrées ----
+  const apiObj = require('../src/api').create({ dialog: {}, shell: {}, app: { isPackaged: false, getVersion: () => 'test', setLoginItemSettings() {}, getLoginItemSettings: () => ({}) }, getWindow: () => null, emit() {} });
+  await apiObj['settings.set']({ onboarding: { aiOk: true, micOk: true, speechOk: true, evil: true, dismissed: 'oui' } });
+  const ob = store.settings.get().onboarding; assert(ob.aiOk === true && ob.micOk === true && ob.speechOk === true && ob.dismissed === true && !('evil' in ob)); ok('étapes de la mise en route (moteur IA testé, micro, reconnaissance vocale) enregistrées — seules les clés prévues sont acceptées');
+  const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8'); assert(/done: !!o\.micOk && !!o\.speechOk/.test(appJs)); ok('étape « micro » cochée seulement quand micro ET reconnaissance vocale sont autorisés');
+  // ---- État de l'autorisation « Reconnaissance vocale » ----
+  fs.writeFileSync(path.join(res, 'jarvis-listen'), '#!/bin/sh\necho "$1"\n', { mode: 0o755 });
+  assert.strictEqual(await voice.speechStatus(false), '--status'); assert.strictEqual(await voice.speechStatus(true), '--authorize'); ok('état de l\'autorisation vocale : lecture simple, ou demande affichée à l\'utilisateur');
+  fs.writeFileSync(path.join(res, 'jarvis-listen'), '#!/bin/sh\necho "AUTORISATION_ATTENTE : x" 1>&2\nexit 8\n', { mode: 0o755 });
+  await assert.rejects(() => voice.transcribe({ audio: Buffer.alloc(4000).toString('base64'), mime: 'audio/wav' }), /n'a pas affiché la demande/); ok('demande macOS jamais affichée : message clair avec le chemin des Réglages Système');
   console.log('\nTous les tests micro / voix passent ✅'); fs.rmSync(tmp, { recursive: true, force: true }); process.exit(0);
 })().catch((e) => { console.error('\n❌ ÉCHEC :', e); process.exit(1); });

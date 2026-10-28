@@ -15,7 +15,7 @@ J.onb = () => {
     { id: 'profil', label: 'Ton profil', hint: 'Nom, titre et signature des textes.', done: !!String(s.profile.nom || '').trim() },
     { id: 'ia', label: 'Moteur IA', hint: s._env.configured ? 'Configuré : il reste à le tester.' : 'Choisis un moteur et colle ta clé (ou utilise Ollama, gratuit et local).', done: !!o.aiOk && !!s._env.configured },
     { id: 'voix', label: 'Voix de Jarvis', hint: 'Une voix féminine humaine est fournie ; tu peux choisir une voix d’homme.', done: !!s._env.piperReady },
-    { id: 'micro', label: 'Micro et reconnaissance vocale', hint: 'Pour dicter et parler à Jarvis.', done: !!o.micOk },
+    { id: 'micro', label: 'Micro et reconnaissance vocale', hint: o.micOk && !o.speechOk ? 'Micro autorisé : il reste à autoriser et tester la reconnaissance vocale.' : 'Pour dicter et parler à Jarvis.', done: !!o.micOk && !!o.speechOk },
   ];
   const n = steps.filter((x) => x.done).length;
   return { steps, n, all: n === steps.length, dismissed: !!(o.dismissed || o.done) };

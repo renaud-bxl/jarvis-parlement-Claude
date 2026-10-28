@@ -4,17 +4,30 @@ import Foundation
 import Speech
 
 let args = CommandLine.arguments
+// Sous-commandes : état de l'autorisation de reconnaissance vocale (sans ou avec demande à l'utilisateur).
+func statusName(_ s: SFSpeechRecognizerAuthorizationStatus) -> String { switch s { case .authorized: return "authorized"; case .denied: return "denied"; case .restricted: return "restricted"; default: return "notDetermined" } }
+if args.count >= 2 && (args[1] == "--status" || args[1] == "--authorize") {
+  var st = SFSpeechRecognizer.authorizationStatus()
+  if args[1] == "--authorize" && st == .notDetermined {
+    let sem = DispatchSemaphore(value: 0); SFSpeechRecognizer.requestAuthorization { _ in sem.signal() }
+    _ = sem.wait(timeout: .now() + 45); st = SFSpeechRecognizer.authorizationStatus()
+  }
+  print(statusName(st)); exit(0)
+}
 guard args.count >= 2 else { FileHandle.standardError.write(Data("usage: jarvis-listen fichier [langue]\n".utf8)); exit(2) }
 let url = URL(fileURLWithPath: args[1])
 let locale = Locale(identifier: args.count >= 3 ? args[2] : "fr-FR")
 
 func fail(_ msg: String, _ code: Int32) -> Never { FileHandle.standardError.write(Data((msg + "\n").utf8)); exit(code) }
 
-let auth = DispatchSemaphore(value: 0)
-var status = SFSpeechRecognizerAuthorizationStatus.notDetermined
-SFSpeechRecognizer.requestAuthorization { s in status = s; auth.signal() }
-_ = auth.wait(timeout: .now() + 60)
-guard status == .authorized else { fail("AUTORISATION_REFUSEE : autorise la reconnaissance vocale pour Jarvis Parlement (Réglages Système › Confidentialité › Reconnaissance vocale).", 3) }
+var status = SFSpeechRecognizer.authorizationStatus()
+if status == .notDetermined {
+  let auth = DispatchSemaphore(value: 0)
+  SFSpeechRecognizer.requestAuthorization { _ in auth.signal() }
+  _ = auth.wait(timeout: .now() + 45); status = SFSpeechRecognizer.authorizationStatus()
+}
+if status == .notDetermined { fail("AUTORISATION_ATTENTE : macOS n'a pas affiché la demande d'accès à la reconnaissance vocale.", 8) }
+guard status == .authorized else { fail("AUTORISATION_REFUSEE : autorise la reconnaissance vocale pour Jarvis Parlement (Réglages Système › Confidentialité et sécurité › Reconnaissance vocale).", 3) }
 guard let rec = SFSpeechRecognizer(locale: locale), rec.isAvailable else { fail("INDISPONIBLE : reconnaissance vocale indisponible pour \(locale.identifier).", 4) }
 rec.queue = OperationQueue() // les réponses arrivent sur cette file (le thread principal est bloqué par les attentes ci-dessous)
 

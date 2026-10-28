@@ -177,12 +177,19 @@ function transcribeMacos(buf, lang, offline = false) {
       if (e) {
         const m = err || e.message;
         if (/AUTORISATION_REFUSEE/.test(m)) { const x = new Error('Reconnaissance vocale refusée : autorise Jarvis Parlement dans Réglages Système › Confidentialité et sécurité › Reconnaissance vocale.'); x.code = 'SPEECH'; return reject(x); }
+        if (/AUTORISATION_ATTENTE/.test(m)) { const x = new Error("macOS n'a pas affiché la demande d'accès à la reconnaissance vocale. Ouvre Réglages Système › Confidentialité et sécurité › Reconnaissance vocale et active Jarvis Parlement (ajoute-le avec « + » s'il n'est pas dans la liste)."); x.code = 'SPEECH'; return reject(x); }
         if (/HORS_LIGNE/.test(m)) { const x = new Error("La reconnaissance vocale hors-ligne du français n'est pas installée sur ce Mac : Réglages Système › Clavier › Dictée › Langues › ajoute le français."); x.code = 'OFFLINE'; return reject(x); }
         return reject(new Error(m.replace(/^\w+ : /, '').replace(/MODE:\w+/g, '').trim().slice(0, 200) || 'Reconnaissance vocale impossible.'));
       }
       resolve({ text: String(so).trim(), mode });
     });
   });
+}
+
+// État de l'autorisation « Reconnaissance vocale » de macOS : authorized | denied | restricted | notDetermined | indisponible. ask = true : affiche la demande à l'utilisateur.
+function speechStatus(ask = false) {
+  if (!macosReady()) return Promise.resolve('indisponible');
+  return new Promise((resolve) => execFile(listenBin(), [ask ? '--authorize' : '--status'], { timeout: 55000 }, (e, so) => resolve(e ? 'indisponible' : (String(so).trim() || 'indisponible'))));
 }
 
 async function transcribe({ audio, mime, offline } = {}) {
@@ -215,4 +222,4 @@ async function transcribe({ audio, mime, offline } = {}) {
 // Chemins des moteurs natifs (diagnostic).
 const binaries = () => ({ speak: speakBin() || null, listen: listenBin() || null });
 
-module.exports = { VOICES, binaries, ensureDefault, warm, piperReady, status, install, removeVoice, synth, stopEngines, configured, engine, macosReady, transcribe };
+module.exports = { VOICES, binaries, speechStatus, ensureDefault, warm, piperReady, status, install, removeVoice, synth, stopEngines, configured, engine, macosReady, transcribe };

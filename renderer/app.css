@@ -153,3 +153,4 @@ label.dchip input:checked+span{background:var(--acc2);border-color:var(--acc2);c
 /* Écran Jarvis : plein cadre, sans marge */
 #main.jv-main{background:radial-gradient(130% 80% at 50% 8%,#0b2d63 0%,#071a3d 38%,#040c20 100%)}
 #main.jv-main #view{max-width:none;padding:0;margin:0}
+.mic-meter{height:8px;border-radius:99px;background:var(--soft);overflow:hidden;margin:6px 0}.mic-meter b{display:block;height:100%;width:0;background:#38d27a;border-radius:99px;transition:width .08s linear}

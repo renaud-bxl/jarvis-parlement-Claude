@@ -86,21 +86,39 @@ J.drawOnb = () => {
 J.act.obGo = (el) => { const sec = document.getElementById(el.dataset.sec); scrollToEl(sec); const f = sec && sec.querySelector(el.dataset.focus || 'input,select'); if (f) setTimeout(() => f.focus({ preventScroll: true }), calm() ? 0 : 400); };
 J.act.obLater = async () => { await setOnb({ dismissed: true }); J.toast('Tu peux la retrouver plus tard dans les Réglages.', 'ok'); };
 J.act.obFinish = async () => { await setOnb({ done: true }); J.go('accueil'); };
-// Micro : demande l'autorisation, puis propose un petit test de dictée (qui déclenche aussi l'autorisation de reconnaissance vocale de macOS).
+// Micro : autorisation du micro, puis de la reconnaissance vocale de macOS, puis test de dictée avec un retour visible à chaque étape.
+const SPEECH_TXT = { authorized: ['ok', 'Reconnaissance vocale autorisée'], denied: ['ko', 'Reconnaissance vocale refusée : active Jarvis Parlement dans Réglages Système › Confidentialité et sécurité › Reconnaissance vocale.'], restricted: ['ko', 'Reconnaissance vocale bloquée par une restriction de ce Mac.'], notDetermined: ['warn', 'Reconnaissance vocale : pas encore autorisée. Clique sur « Autoriser la reconnaissance vocale » : une fenêtre macOS doit s’afficher.'], indisponible: ['ko', 'Reconnaissance vocale indisponible sur ce Mac.'] };
+const showSpeech = (st) => { const el = document.getElementById('spStat'); if (!el) return; const [k, t] = SPEECH_TXT[st] || SPEECH_TXT.indisponible; el.className = 'pill ' + k; el.style.whiteSpace = 'normal'; el.textContent = t; const b = document.getElementById('spBtn'); if (b) b.hidden = st === 'authorized'; };
 J.act.obMic = (el) => J.busy(el, async () => {
   const st = await J.call('voice.micStatus');
-  if (st !== 'granted') return J.modal(`<h2>Micro non autorisé</h2><p>Jarvis a besoin du micro pour t'écouter. Ouvre les réglages de macOS, active <b>Jarvis Parlement</b> dans « Confidentialité › Micro », puis reviens ici et réessaie.</p><div class="row" style="margin-top:14px"><button class="pri" data-act="openMic">Ouvrir les réglages macOS</button><button data-act="closeModal">Fermer</button></div>`, null, { narrow: true });
-  await setOnb({ micOk: true }); J.toast('Micro autorisé', 'ok');
-  J.modal(`<h2>Micro autorisé</h2><p>Teste la dictée : clique sur « Écouter » et dis une phrase. Si macOS demande l'accès à la reconnaissance vocale, accepte.</p><div id="dicRes" aria-live="polite" class="card" style="background:var(--soft);min-height:56px;margin:12px 0 0"><span class="muted">Le texte reconnu apparaîtra ici.</span></div><div class="row" style="margin-top:14px"><button class="pri" data-act="obDictee">${J.icon('mic')} Écouter</button><button data-act="closeModal">Terminer</button></div>`, null, { narrow: true });
+  if (st !== 'granted') return J.modal(`<h2>Micro non autorisé</h2><p>Jarvis a besoin du micro pour t'écouter. Ouvre les réglages de macOS, active <b>Jarvis Parlement</b> dans « Confidentialité et sécurité › Microphone », puis reviens ici et réessaie.</p><div class="row" style="margin-top:14px"><button class="pri" data-act="openMic">Ouvrir les réglages macOS</button><button data-act="closeModal">Fermer</button></div>`, null);
+  await setOnb({ micOk: true });
+  J.modal(`<h2>Micro et reconnaissance vocale</h2>
+    <p><span class="pill ok">Micro autorisé</span></p>
+    <p><span class="pill warn" id="spStat" style="white-space:normal">Vérification de la reconnaissance vocale…</span></p>
+    <div class="row" style="margin:6px 0 10px"><button class="sm pri" id="spBtn" data-act="obSpeech">Autoriser la reconnaissance vocale</button><button class="sm" data-act="openSpeech">Ouvrir les réglages « Reconnaissance vocale »</button></div>
+    <p class="muted small">Teste la dictée : clique sur « Écouter », puis dis une phrase.</p>
+    <div class="mic-meter" aria-hidden="true"><b id="dicLvl"></b></div>
+    <div id="dicRes" aria-live="polite" class="card" style="background:var(--soft);min-height:56px;margin:10px 0 0"><span class="muted">Le texte reconnu apparaîtra ici.</span></div>
+    <div class="row" style="margin-top:14px"><button class="pri" data-act="obDictee">Écouter</button><button data-act="closeModal">Terminer</button></div>`, null);
+  J.call('voice.speechStatus', {}).then(showSpeech).catch(() => showSpeech('indisponible'));
 }, 'Vérification…');
+J.act.obSpeech = (el) => J.busy(el, async () => {
+  const st = await J.call('voice.speechStatus', { ask: true }); showSpeech(st);
+  if (st === 'authorized') await setOnb({ speechOk: true });
+}, 'Demande en cours… (accepte la fenêtre macOS)');
+J.act.openSpeech = () => J.call('voice.openSpeechSettings').catch(() => {});
 J.act.obDictee = (el) => J.busy(el, async () => {
-  const out = document.getElementById('dicRes'); out.innerHTML = '<span class="muted">Je t\'écoute… parle maintenant.</span>';
+  const out = document.getElementById('dicRes'); const lvl = document.getElementById('dicLvl'); const say = (h) => { if (out) out.innerHTML = h; };
+  say('<span class="muted">Je t\'écoute… parle maintenant.</span>');
   try {
-    const h = await J.listen({ vad: true, noSpeechMs: 8000 }); const r = await h.done;
-    if (!r.wav) { out.innerHTML = '<span class="muted">Je n\'ai rien entendu. Rapproche-toi du micro et réessaie.</span>'; return; }
-    out.innerHTML = '<span class="muted">Transcription…</span>'; const text = await J.transcribe(r.wav);
-    out.innerHTML = text ? `<b>Entendu :</b> « ${J.esc(text)} »` : '<span class="muted">Rien de reconnu. Réessaie en parlant un peu plus fort.</span>';
-  } catch (e) { out.innerHTML = `<b>La dictée n'a pas fonctionné.</b> ${J.esc(J.errMsg(e))}<br><span class="muted small">Vérifie « Confidentialité › Reconnaissance vocale » dans les réglages de macOS.</span>`; }
+    const h = await J.listen({ vad: true, noSpeechMs: 8000, onLevel: (v) => { if (lvl) lvl.style.width = Math.min(100, Math.round(v * 1100)) + '%'; } }); const r = await h.done; if (lvl) lvl.style.width = '0';
+    if (!r.wav) { say('<b>Je n\'ai rien entendu.</b> <span class="muted">Le niveau du micro est resté très bas : vérifie dans Réglages Système › Son › Entrée que le bon micro est choisi et que le volume d\'entrée n\'est pas à zéro.</span>'); return; }
+    const t0 = Date.now(); const tick = setInterval(() => say(`<span class="muted">Transcription… ${Math.round((Date.now() - t0) / 1000)} s <br>Si une fenêtre macOS demande l'accès à la reconnaissance vocale, accepte-la.</span>`), 1000); say('<span class="muted">Transcription…</span>');
+    let text; try { text = await J.transcribe(r.wav); } finally { clearInterval(tick); }
+    if (text) { say(`<b>Entendu :</b> « ${J.esc(text)} »`); await setOnb({ micOk: true, speechOk: true }); J.toast('Micro et reconnaissance vocale : tout fonctionne.', 'ok'); }
+    else say('<span class="muted">Le micro fonctionne, mais rien n\'a été reconnu. Réessaie en parlant un peu plus fort et plus près du micro.</span>');
+  } catch (e) { say(`<b>La dictée n'a pas fonctionné.</b> ${J.esc(J.errMsg(e))}`); }
 }, 'Écoute…');
 
 J.pages.reglages = async (root, arg) => {

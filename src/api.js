@@ -77,6 +77,7 @@ function sanitizeSettingsPatch(raw) {
     if (v.sttUrl !== undefined) d.sttUrl = cleanUrl(v.sttUrl, 'Adresse de transcription');
     out.voice = d;
   }
+  if (isObj(p.onboarding)) { const d = {}; for (const k of ['aiOk', 'micOk', 'speechOk', 'dismissed', 'done']) if (p.onboarding[k] !== undefined) d[k] = !!p.onboarding[k]; if (Object.keys(d).length) out.onboarding = d; } // état de l'assistant de mise en route
   if (isObj(p.google) && p.google.clientId !== undefined) out.google = { clientId: String(p.google.clientId || '').trim().slice(0, 300) };
   if (isObj(p.jarvis) && p.jarvis.converse !== undefined) out.jarvis = { converse: !!p.jarvis.converse };
   if (isObj(p.mail)) { // la liste des urgents (mail.vip) et les comptes ont leurs propres méthodes validées
@@ -371,6 +372,7 @@ function create(ctx) {
       if (st === 'not-determined') return (await sp.askForMediaAccess('microphone')) ? 'granted' : 'denied';
       return st;
     },
+    'voice.speechStatus': ({ ask } = {}) => voice.speechStatus(ask === true),
     'voice.openSpeechSettings': () => ctx.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition'),
     'voice.openMicSettings': () => ctx.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'),
 
