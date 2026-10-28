@@ -21,8 +21,12 @@ const VOICES = [
   { id: 'pierre', label: 'Pierre', gender: 'homme', model: 'vits-piper-fr_FR-upmc-medium-int8', sid: 1, mb: 23 },
 ];
 const vdir = () => path.join(store.DIR, 'voice');
-const modelDir = (v) => path.join(vdir(), 'models', v.model);
-const hasModel = (v) => fs.existsSync(path.join(modelDir(v), 'tokens.txt')) && fs.existsSync(path.join(modelDir(v), 'espeak-ng-data'));
+// Les voix fournies avec l'application (voix féminine par défaut) sont cherchées d'abord ; les autres sont téléchargées dans le dossier de données.
+const bundledRoots = () => [process.resourcesPath && path.join(process.resourcesPath, 'voices'), path.join(__dirname, '..', 'native', 'build', 'voices')].filter(Boolean);
+const okDir = (d) => fs.existsSync(path.join(d, 'tokens.txt')) && fs.existsSync(path.join(d, 'espeak-ng-data'));
+const bundledDir = (v) => bundledRoots().map((r) => path.join(r, v.model)).find(okDir) || null;
+const modelDir = (v) => bundledDir(v) || path.join(vdir(), 'models', v.model);
+const hasModel = (v) => okDir(modelDir(v));
 const speakBin = () => [
   process.resourcesPath && path.join(process.resourcesPath, 'jarvis-speak'),
   path.join(__dirname, '..', 'native', 'build', 'jarvis-speak'),
@@ -37,7 +41,7 @@ function status() {
   return {
     engineInstalled: !!speakBin(),
     arch: process.arch,
-    voices: VOICES.map((v) => ({ ...v, installed: hasModel(v) })),
+    voices: VOICES.map((v) => ({ ...v, installed: hasModel(v), bundled: !!bundledDir(v) })),
   };
 }
 
@@ -91,7 +95,18 @@ async function install(voiceId, emit = () => {}) {
 function removeVoice(voiceId) {
   const v = VOICES.find((x) => x.id === voiceId); if (!v) return status();
   stopEngines();
+  if (bundledDir(v)) return status(); // voix fournie avec l'application : non supprimable
   if (!VOICES.some((o) => o.id !== v.id && o.model === v.model && hasModel(o) && store.settings.get().voice.piperVoice === o.id)) fs.rmSync(modelDir(v), { recursive: true, force: true });
+  return status();
+}
+
+// Au démarrage : la voix de Jarvis est toujours une voix humaine. Voix choisie, sinon la voix féminine par défaut ; téléchargée seulement si elle n'est pas fournie avec l'application.
+const wantedVoice = () => { const id = store.settings.get().voice.piperVoice; return VOICES.find((x) => x.id === id) || VOICES[0]; };
+async function ensureDefault(emit = () => {}) {
+  if (!speakBin()) return status();
+  let v = wantedVoice();
+  if (!hasModel(v)) { v = VOICES[0]; if (!hasModel(v)) { await install(v.id, emit); return status(); } store.settings.set({ voice: { engine: 'piper', piperVoice: v.id } }); }
+  else if (store.settings.get().voice.engine !== 'piper') store.settings.set({ voice: { engine: 'piper', piperVoice: v.id } });
   return status();
 }
 
@@ -131,6 +146,9 @@ function synth(text) {
   return job;
 }
 
+// Charge la voix en mémoire dès le démarrage : la première phrase est alors prononcée sans attente.
+function warm() { try { const v = wantedVoice(); if (speakBin() && hasModel(v)) engineFor(v).ready.catch(() => {}); } catch { /* sera réessayé à la première phrase */ } }
+
 // ---- Écoute (transcription) ----
 // Moteur 1 (par défaut) : reconnaissance vocale de macOS via l'assistant « jarvis-listen » — gratuit, sans clé, sur l'appareil quand c'est possible.
 // Moteur 2 : Whisper via une API compatible OpenAI (OpenAI, ou serveur local open source type whisper.cpp).
@@ -148,18 +166,26 @@ function whisperConfigured() {
 const engine = () => { const v = store.settings.get().voice; return v.stt === 'whisper' ? (whisperConfigured() ? 'whisper' : null) : (macosReady() ? 'macos' : (whisperConfigured() ? 'whisper' : null)); };
 const configured = () => !!engine();
 
-function transcribeMacos(buf, lang) {
+// offline = true : écoute permanente (mot de réveil) — uniquement sur l'appareil, jamais de repli vers les serveurs d'Apple.
+function transcribeMacos(buf, lang, offline = false) {
   const f = path.join(tmpDir(), `jarvis-stt-${process.pid}-${Date.now()}.wav`); fs.writeFileSync(f, buf, { mode: 0o600 });
+  const args = [f, lang === 'nl' ? 'nl-BE' : lang === 'en' ? 'en-GB' : 'fr-FR']; if (offline) args.push('offline');
   return new Promise((resolve, reject) => {
-    execFile(listenBin(), [f, lang === 'nl' ? 'nl-BE' : lang === 'en' ? 'en-GB' : 'fr-FR'], { timeout: 95000 }, (e, so, se) => {
-      fs.rmSync(f, { force: true });
-      if (e) { const m = String(se || e.message); if (/AUTORISATION_REFUSEE/.test(m)) return reject(new Error('Reconnaissance vocale refusée : autorise Jarvis Parlement dans Réglages Système › Confidentialité › Reconnaissance vocale.')); return reject(new Error(m.replace(/^\w+ : /, '').trim().slice(0, 200) || 'Reconnaissance vocale impossible.')); }
-      resolve({ text: String(so).trim() });
+    execFile(listenBin(), args, { timeout: 95000 }, (e, so, se) => {
+      fs.rmSync(f, { force: true }); const err = String(se || '');
+      const mode = /MODE:online/.test(err) ? 'online' : 'device';
+      if (e) {
+        const m = err || e.message;
+        if (/AUTORISATION_REFUSEE/.test(m)) { const x = new Error('Reconnaissance vocale refusée : autorise Jarvis Parlement dans Réglages Système › Confidentialité et sécurité › Reconnaissance vocale.'); x.code = 'SPEECH'; return reject(x); }
+        if (/HORS_LIGNE/.test(m)) { const x = new Error("La reconnaissance vocale hors-ligne du français n'est pas installée sur ce Mac : Réglages Système › Clavier › Dictée › Langues › ajoute le français."); x.code = 'OFFLINE'; return reject(x); }
+        return reject(new Error(m.replace(/^\w+ : /, '').replace(/MODE:\w+/g, '').trim().slice(0, 200) || 'Reconnaissance vocale impossible.'));
+      }
+      resolve({ text: String(so).trim(), mode });
     });
   });
 }
 
-async function transcribe({ audio, mime } = {}) {
+async function transcribe({ audio, mime, offline } = {}) {
   const v = store.settings.get().voice; const st = store.settings.get();
   const eng = engine();
   if (!eng) throw new Error("Aucune reconnaissance vocale disponible (Réglages › Voix). En attendant, utilise la dictée macOS : appuie deux fois sur Fn.");
@@ -168,7 +194,8 @@ async function transcribe({ audio, mime } = {}) {
   const buf = Buffer.from(audio, 'base64');
   if (buf.length < 1500) throw new Error('Enregistrement trop court.');
   mime = typeof mime === 'string' ? mime.slice(0, 60) : '';
-  if (eng === 'macos') return transcribeMacos(buf, st.profile.langue);
+  if (eng === 'macos') return transcribeMacos(buf, st.profile.langue, offline === true);
+  if (offline === true) throw new Error("L'écoute permanente demande la reconnaissance hors-ligne de macOS (aucun son n'est envoyé sur Internet).");
   let url; try { url = new URL(v.sttUrl); } catch { throw new Error("Adresse du serveur de transcription invalide (Réglages › Voix)."); }
   const key = store.getSecret('stt_key');
   const loop = ['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname);
@@ -188,4 +215,4 @@ async function transcribe({ audio, mime } = {}) {
 // Chemins des moteurs natifs (diagnostic).
 const binaries = () => ({ speak: speakBin() || null, listen: listenBin() || null });
 
-module.exports = { VOICES, binaries, piperReady, status, install, removeVoice, synth, stopEngines, configured, engine, macosReady, transcribe };
+module.exports = { VOICES, binaries, ensureDefault, warm, piperReady, status, install, removeVoice, synth, stopEngines, configured, engine, macosReady, transcribe };

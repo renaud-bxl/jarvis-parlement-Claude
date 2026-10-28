@@ -86,7 +86,8 @@
   // ---------- Parole ----------
   const say = async (text) => {
     if (!text || store.get('muted', false)) { await wait(250); return; }
-    setState('speaking'); try { await J.speak(text); } finally { if (H.state === 'speaking') setState('idle'); }
+    const rel = H.stream && !H.stream.closed ? H.stream.hold() : null; // pas d'écho : le micro ignore ma propre voix
+    setState('speaking'); try { await J.speak(text); } finally { if (rel) rel(); if (H.state === 'speaking') setState('idle'); }
   };
 
   // ---------- Affichage ----------
@@ -160,54 +161,105 @@
     return res;
   }
 
-  // ---------- Écoute ----------
+  // ---------- Micro : réveil par « Hé Jarvis », puis conversation ----------
+  // Mot de réveil : « Hé Jarvis », « Hey Jarvis », « Ok Jarvis », « Salut Jarvis », « Jarvis »… suivi (ou non) de la demande dans la même phrase.
+  const WAKE_PRE = '(?:h[eéè]+|hey|hé|eh|et|ok|okay|salut|alors|dis|dites|bonjour|bonsoir|all?[oô]|oh|ah)';
+  const WAKE_RX = new RegExp('^\\s*(?:' + WAKE_PRE + '[\\s,.!?-]+){0,2}(?:jarvis|jar\\s?vis|jarvisse|jarvice|jarviss|djarvis|charvis|yarvis|garvis|jervis)\\b[\\s,.:;!?-]*', 'i');
+  J.wakeSplit = (text) => { const t = String(text || ''); const m = WAKE_RX.exec(t); return m ? { woke: true, rest: t.slice(m[0].length).trim() } : { woke: false, rest: t.trim() }; };
+  const micPill = () => {
+    const b = $('jvMicMode'); if (!b) return;
+    const on = !!H.micOn; b.setAttribute('aria-pressed', String(on)); b.dataset.on = on ? '1' : '0';
+    b.innerHTML = on ? `<i class="dot"></i> Micro activé · dites « Hé Jarvis »<span class="jv-meter" aria-hidden="true"><b id="jvMeter"></b></span>` : '<i class="dot"></i> Micro coupé · touchez pour l’activer';
+    b.title = on ? 'Couper le micro' : 'Activer le micro : Jarvis vous écoute et se réveille quand vous dites « Hé Jarvis »';
+  };
+  const heard = (t, kind) => { const h = $('jvHeard'); if (!h) return; h.textContent = t ? (kind === 'ignored' ? `Entendu : « ${t} » — dites « Hé Jarvis » pour me réveiller` : `Entendu : « ${t} »`) : ''; h.dataset.kind = kind || ''; };
   const micError = (e) => {
-    const hint = { MIC: ['Micro refusé : autorisez Jarvis Parlement dans Réglages Système › Confidentialité et sécurité › Microphone, puis touchez l’orbe.', 'openMic', 'Ouvrir les réglages'], NOMIC: [e.message, 'openSound', 'Réglages du son'], BUSY: [e.message, null], MICERR: [e.message, null] }[e.code];
+    const hint = { MIC: ['Micro refusé : autorisez Jarvis Parlement dans Réglages Système › Confidentialité et sécurité › Microphone, puis touchez le bouton du micro.', 'openMic', 'Ouvrir les réglages'], NOMIC: [e.message, 'openSound', 'Réglages du son'], BUSY: [e.message, null, null] }[e.code];
     setState('idle', ''); notice(hint ? hint[0] : (e.message || 'Le micro est inaccessible.'), hint && hint[1], hint && hint[2]); return null;
   };
-  async function listenOnce() {
-    if (!J.S._env.sttReady) { setState('idle', ''); notice('La reconnaissance vocale n’est pas disponible. Écrivez votre demande ci-dessous, ou configurez-la dans Réglages › Voix.', 'jvSetup', 'Ouvrir les réglages'); return null; }
-    let h;
-    try { h = await J.listen({ vad: true, noSpeechMs: 9000, endSilenceMs: 1300, onLevel: (v) => { H.level = v; } }); } catch (e) { return micError(e); }
-    H.listening = h; notice(''); setState('listening');
-    const r = await h.done; H.listening = null; H.level = 0;
-    if (r.reason === 'error') { setState('idle', ''); notice('Le micro s’est déconnecté. Vérifiez-le puis touchez l’orbe.'); return null; }
-    if (!r.wav) { if (r.reason === 'manual') { setState('idle', ''); return null; } H.empties++; return ''; }
-    setState('thinking', 'Je transcris…');
-    try {
-      const text = J.cleanHeard((await J.transcribe(r.wav)).trim());
-      if (!text) { H.empties++; return ''; }
-      H.empties = 0; return text;
-    } catch (e) { setState('idle', ''); notice('Je n’ai pas pu transcrire : ' + e.message + ' Vous pouvez aussi écrire votre demande ci-dessous.'); return null; }
+  // ---- Micro ouvert en continu : le flux ne se ferme jamais pendant la transcription ; les phrases détectées sont traitées une par une ----
+  const ACTIVE_MS = 12000;                  // après « Hé Jarvis » ou une réponse : je reste à l'écoute 12 s sans mot de réveil
+  const isActive = () => Date.now() < (H.activeUntil || 0);
+  const idleStatus = () => (H.stream && !H.stream.closed ? (isActive() ? 'Je vous écoute…' : 'Micro actif : dites « Hé Jarvis »') : '');
+  const closeStream = () => { if (H.dog) { clearInterval(H.dog); H.dog = 0; } if (H.stream) { try { H.stream.stop(); } catch { /* ok */ } H.stream = null; } H.activeUntil = 0; H.level = 0; const m = $('jvMeter'); if (m) m.style.width = '0'; };
+  async function openStream() {
+    if (H.stream && !H.stream.closed) return H.stream;
+    if (H.opening) return H.opening;
+    if (!J.S._env.sttReady) { setState('idle', ''); notice('La reconnaissance vocale n’est pas disponible sur ce Mac. Écrivez votre demande ci-dessous.', 'jvSetup', 'Ouvrir les réglages'); return null; }
+    H.opening = (async () => {
+      try {
+        const st = await J.listenStream({
+          onSegment: (seg) => { H.q = (H.q || Promise.resolve()).then(() => handleSegment(seg)).catch((e) => console.error('[micro] segment', e)); },
+          onLevel: (v) => { H.level = v; const m = $('jvMeter'); if (m) m.style.width = Math.min(100, Math.round(v * 1100)) + '%'; },
+          onSpeechStart: () => { if (!H.busy && H.state !== 'speaking' && H.state !== 'thinking') setState('listening', isActive() ? 'Je vous écoute…' : 'Je vous entends…'); },
+        });
+        H.stream = st; notice(''); H.deaf = 0; setState('idle', idleStatus());
+        // Surveillance : état affiché, retour en veille après la fenêtre active, avertissement si aucun son n'arrive du micro.
+        H.dog = setInterval(() => {
+          if (!onPage() || !H.stream) return closeStream();
+          if (H.stream.closed) { closeStream(); if (onPage()) { setState('idle', ''); notice('Le micro s’est déconnecté. Vérifiez-le puis touchez le bouton du micro.'); } return; }
+          if (H.state === 'idle') { const want = idleStatus(); const el = $('jvStatus'); if (el && el.textContent !== want) setState('idle', want); }
+          if (!H.micOn && !isActive() && !H.busy && H.state !== 'speaking') { closeStream(); setState('idle', 'Touchez l’orbe, appuyez sur Espace ou activez le micro pour me parler.'); return; }
+          const quiet = performance.now() - H.stream.info.lastSoundAt;
+          if (quiet > 15000 && H.stream.info.maxRms < 0.002) { H.deaf = 1; notice('Je n’entends aucun son venant du micro. Vérifiez qu’il n’est pas coupé et choisissez le bon micro dans Réglages Système › Son › Entrée.', 'openSound', 'Réglages du son'); }
+          else if (H.deaf && H.stream.info.maxRms >= 0.002) { H.deaf = 0; notice(''); }
+        }, 1000);
+        return st;
+      } catch (e) { micError(e); return null; }
+      finally { H.opening = null; }
+    })();
+    return H.opening;
   }
-  async function conversation() {
-    if (H.loop) return; H.loop = true; const my = ++H.token;
+  // Une phrase captée : transcription locale, puis réveil / commande. La capture est suspendue pendant le traitement et la réponse (pas d'écho).
+  async function handleSegment(seg) {
+    if (!H.stream || H.stream.closed || !onPage()) return;
+    const release = H.stream.hold(); const wake = !isActive();
+    console.log('[micro]', wake ? 'réveil' : 'actif', 'phrase', seg.ms + ' ms', 'pic=' + seg.peak.toFixed(3));
     try {
-      while (H.token === my && onPage()) {
-        const text = await listenOnce();
-        if (H.token !== my || !onPage()) break;
-        if (text === null) break;
-        if (text === '') { if (H.empties >= 2) { setState('idle', 'Je reste disponible : touchez l’orbe ou appuyez sur Espace pour me parler.'); break; } continue; }
-        const res = await turn(text, { voice: true });
-        if (!res || !store.get('converse', true) || res.end || H.token !== my) break;
-        await wait(350); // laisse retomber l'écho de la voix avant de rouvrir le micro
+      setState('thinking', 'Je transcris…');
+      const out = await J.call('voice.transcribe', { audio: seg.wav, mime: 'audio/wav', offline: wake });
+      const text = J.cleanHeard(String(out.text || '').trim());
+      console.log('[micro] transcrit (' + (out.mode || '?') + ') :', JSON.stringify(out.text), '→', JSON.stringify(text));
+      if (!text) { setState('idle', idleStatus()); return; }
+      const w = J.wakeSplit(text); let cmd = text;
+      if (wake) {
+        if (!w.woke) { heard(text, 'ignored'); setState('idle', idleStatus()); return; }       // pas le mot de réveil : ignoré (traité localement, rien n'est envoyé)
+        cmd = w.rest; heard(text); H.activeUntil = Date.now() + ACTIVE_MS;
+        if (!cmd) { await say('Oui ?'); H.activeUntil = Date.now() + ACTIVE_MS; setState('idle', idleStatus()); return; }
+      } else if (w.woke) {
+        cmd = w.rest; if (!cmd) { await say('Oui ?'); H.activeUntil = Date.now() + ACTIVE_MS; setState('idle', idleStatus()); return; }
       }
-    } catch (e) { setState('idle', ''); notice('Un problème est survenu : ' + e.message); }
-    finally { if (H.token === my) H.loop = false; if (onPage() && H.state !== 'speaking' && !H.listening && H.state !== 'thinking') setState('idle'); }
+      heard(cmd); H.activeUntil = Date.now() + 120000; // pendant le traitement, la fenêtre reste ouverte
+      const res = await turn(cmd, { voice: true });
+      H.activeUntil = res && !res.end && store.get('converse', true) ? Date.now() + ACTIVE_MS : 0;
+    } catch (e) {
+      const msg = String(e.message || e); H.activeUntil = 0;
+      if (/Reconnaissance vocale refusée/.test(msg)) { setState('idle', ''); notice(msg, 'openSpeech', 'Ouvrir les réglages'); }
+      else if (/hors-ligne/.test(msg)) { setState('idle', ''); notice(msg + ' Vous pouvez toujours toucher l’orbe pour me parler.', 'openSpeech', 'Ouvrir les réglages'); H.micOn = false; store.set('micOn', false); micPill(); }
+      else { setState('idle', ''); notice('Je n’ai pas pu transcrire : ' + msg + ' Vous pouvez aussi écrire votre demande ci-dessous.'); }
+    } finally { release(); if (onPage() && H.state !== 'speaking' && H.state !== 'thinking') setState('idle', idleStatus()); }
   }
+  const startWatch = () => { if (H.micOn && onPage() && J.S._env.sttReady) openStream(); };
+  // Appui sur l'orbe / Espace : j'écoute tout de suite (sans mot de réveil) pendant 12 s ; un second appui referme la fenêtre.
+  async function pushToTalk() {
+    if (isActive() && H.stream && !H.busy) { H.activeUntil = 0; setState('idle', idleStatus()); return; }
+    const st = await openStream(); if (!st) return; H.activeUntil = Date.now() + ACTIVE_MS; setState('idle', 'Je vous écoute…'); notice('');
+  }
+  const conversation = pushToTalk;
+
   // Arrêt immédiat : voix, lecture des mails, écoute, tour en cours.
-  const halt = () => { J.stopReading(); H.token++; H.turnId++; H.busy = false; if (H.listening) { H.listening.stop(); H.listening = null; } J.stopSpeak(); H.loop = false; H.level = 0; H.state = 'idle'; };
+  const halt = () => { J.stopReading(); H.token++; H.turnId++; H.busy = false; H.activeUntil = 0; J.stopSpeak(); H.level = 0; H.state = 'idle'; };
   const stopAll = () => { halt(); const w = document.querySelector('#jvLog .wait'); if (w) w.remove(); J.$$('.jv-mail').forEach((c) => c.classList.remove('reading')); if (onPage()) setState('idle', ''); };
   const onKey = (e) => {
     if (!onPage()) return;
     const el = document.activeElement; const typing = el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
     if (document.querySelector('#modal-root .modal')) return;
-    if (e.key === 'Escape') { if (H.listening || J.speaking || H.loop || H.state !== 'idle') { e.preventDefault(); stopAll(); } else if (typing) el.blur(); return; }
+    if (e.key === 'Escape') { if (J.speaking || isActive() || H.state !== 'idle') { e.preventDefault(); stopAll(); } else if (typing) el.blur(); return; }
     if (typing || e.metaKey || e.ctrlKey || e.altKey || (el && /^(BUTTON|A)$/.test(el.tagName))) return;
     if (e.key === ' ') { e.preventDefault(); J.act.jvOrb(); } else if (e.key === '/') { e.preventDefault(); const i = $('jvIn'); if (i) i.focus(); }
   };
   document.addEventListener('keydown', onKey);
-  J.leave = () => { halt(); stopOrb(); const m = $('main'); if (m) m.classList.remove('jv-main'); };
+  J.leave = () => { halt(); closeStream(); stopOrb(); const m = $('main'); if (m) m.classList.remove('jv-main'); };
 
   // ---------- Page ----------
   J.pages.accueil = async (root) => {
@@ -232,7 +284,7 @@
         <div class="jv-log" id="jvLog" role="log" aria-live="polite" aria-label="Conversation"></div>
         <div id="jvOut" class="jv-out"></div>
       </div>
-      <div class="jv-dock"><div class="jv-status" id="jvStatus" role="status" aria-live="polite"></div><div class="jv-notice" id="jvNotice" role="alert" hidden></div></div>
+      <div class="jv-dock"><button class="jv-micmode" id="jvMicMode" data-act="jvMicToggle" aria-pressed="false"></button><div class="jv-status" id="jvStatus" role="status" aria-live="polite"></div><div class="jv-heard" id="jvHeard" aria-live="off"></div><div class="jv-notice" id="jvNotice" role="alert" hidden></div></div>
       <div class="jv-bar">
         <button class="jv-mic" id="jvMic" data-act="jvOrb" aria-pressed="false" aria-keyshortcuts="Space" title="Parler (Espace) — touchez à nouveau pour terminer">🎤 Parler à Jarvis</button>
         <input id="jvIn" aria-label="Votre demande à Jarvis" placeholder="Dites-moi : « Fais une veille sur le logement à Bruxelles »…" autocomplete="off">
@@ -241,11 +293,11 @@
       <div class="jv-foot"><label class="jv-conv"><input type="checkbox" id="jvConv" ${store.get('converse', true) ? 'checked' : ''}> Conversation continue (j’écoute à nouveau après chaque réponse)</label><span class="jv-keys">Espace : parler · Échap : arrêter · / : écrire</span></div>
     </section>`;
     J.state.jh.forEach((m) => { if (m.content) addMsg(m.role === 'user' ? 'me' : 'bot', m.content); });
-    startOrb($('orb')); setState('idle');
+    H.micOn = store.get('micOn', false); startOrb($('orb')); setState('idle'); micPill();
     $('jvIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') J.act.jvSend(); });
     $('jvConv').addEventListener('change', (e) => store.set('converse', e.target.checked));
 
-    if (!first) { ['jh1', 'jh2', 'jh3'].forEach((id) => $(id)?.classList.add('in')); renderAbilities(g, false); return; }
+    if (!first) { ['jh1', 'jh2', 'jh3'].forEach((id) => $(id)?.classList.add('in')); renderAbilities(g, false); startWatch(); return; }
     // Première arrivée : salutation parlée, lignes qui apparaissent au rythme de la voix.
     J.state.greeted = true;
     const lines = [$('jh1'), $('jh2'), $('jh3')].filter(Boolean);
@@ -261,15 +313,14 @@
     if (H.token !== my || !onPage()) return;
     if (speak) { setState('speaking'); await say(speech); }
     else await wait(2500);
-    if (H.token === my && onPage() && g.ready && store.get('converse', true) && J.S._env.sttReady) conversation();
+    if (H.token === my && onPage() && g.ready) { if (H.micOn) startWatch(); else if (J.S._env.sttReady) notice('Touchez le bouton « Micro » pour que je vous écoute, puis dites « Hé Jarvis ».'); }
   };
 
   // ---------- Actions ----------
   J.act.jvOrb = () => {
-    if (H.listening) { H.listening.stop(); return; }                   // terminer l'écoute maintenant
     if (H.state === 'thinking') { stopAll(); notice('Demande annulée.'); return; }
     if (J.speaking || H.state === 'speaking') { stopAll(); return; }   // un clic coupe la voix immédiatement
-    notice(''); conversation();
+    notice(''); pushToTalk();
   };
   J.act.jvSend = async () => {
     const i = $('jvIn'); const t = i.value.trim(); if (!t) return;
@@ -278,6 +329,12 @@
   };
   J.act.jvSay = (el) => { $('jvIn').value = el.dataset.t; J.act.jvSend(); };
   J.act.jvNew = () => { stopAll(); resetConversation(); notice(''); const r = $('jv'); if (r) r.classList.remove('compact'); J.call('jarvis.command', { text: 'nouvelle conversation' }).catch(() => {}); };
+  J.act.jvMicToggle = async () => {
+    H.micOn = !H.micOn; store.set('micOn', H.micOn); micPill(); notice(''); heard('');
+    if (H.micOn) { const st = await openStream(); if (!st) { H.micOn = false; store.set('micOn', false); micPill(); } }
+    else if (!isActive() && !H.busy) { closeStream(); setState('idle', ''); }
+  };
+  J.act.openSpeech = () => J.call('voice.openSpeechSettings').catch(() => {});
   J.act.openSound = () => J.call('app.openExternal', { url: 'x-apple.systempreferences:com.apple.Sound-Settings.extension' }).catch(() => {});
   J.act.jvAbility = (el) => {
     J.call('jarvis.greeting').then((g) => {

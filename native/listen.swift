@@ -34,7 +34,11 @@ func run(onDevice: Bool, wait: Double) -> (String?, String?) {
   return (text ?? (partial.isEmpty ? nil : partial), err)
 }
 
-var result: (String?, String?) = (nil, nil)
-if rec.supportsOnDeviceRecognition { result = run(onDevice: true, wait: 20) }
-if result.0 == nil { result = run(onDevice: false, wait: 60) }
-if let t = result.0 { print(t) } else { fail("ERREUR : " + (result.1 ?? "aucun texte reconnu"), 6) }
+// Mode « hors-ligne » (écoute permanente du mot de réveil) : jamais d'envoi à Apple. Sinon : sur l'appareil d'abord, en ligne en secours.
+let offlineOnly = args.count >= 4 && args[3] == "offline"
+if offlineOnly && !rec.supportsOnDeviceRecognition { fail("HORS_LIGNE : la reconnaissance hors-ligne du français n'est pas installée (Réglages Système › Clavier › Dictée › Langues).", 7) }
+var result: (String?, String?) = (nil, nil); var mode = "device"
+if rec.supportsOnDeviceRecognition { result = run(onDevice: true, wait: offlineOnly ? 12 : 20) }
+if result.0 == nil && !offlineOnly { mode = "online"; result = run(onDevice: false, wait: 60) }
+FileHandle.standardError.write(Data("MODE:\(mode)\n".utf8))
+if let t = result.0 { print(t) } else if offlineOnly { print("") } else { fail("ERREUR : " + (result.1 ?? "aucun texte reconnu"), 6) }

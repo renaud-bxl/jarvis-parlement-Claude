@@ -90,7 +90,7 @@ const research = require('../src/research'); const mail = require('../src/mail')
   r = await jv.command({ text: 'rédige une question sur le tram 10' }).catch((e) => ({ ok: false, error: e.message })); assert(r.ok === true || /Texte de test|brouillon|Tram/.test(JSON.stringify(r))); ok('rédaction vocale → brouillon');
   r = await jv.command({ text: 'merci' }); assert(r.end === true); ok('« merci » termine la conversation');
   r = await jv.command({ text: 'retiens que je préfère des questions courtes' }); assert(/noté/.test(r.say)); ok('« retiens que… » alimente le cerveau');
-  const vc = require('../src/voice'); assert(vc.VOICES.some((x) => x.gender === 'femme') && vc.VOICES.some((x) => x.gender === 'homme')); assert(vc.status().voices.every((x) => x.installed === false)); ok('voix humaines : femmes et hommes proposés, aucune installée par défaut');
+  const vc = require('../src/voice'); assert(vc.VOICES.some((x) => x.gender === 'femme') && vc.VOICES.some((x) => x.gender === 'homme')); assert(vc.status().voices.every((x) => x.bundled || x.installed === false)); ok('voix humaines : femmes et hommes proposés, seules les voix fournies avec l’application sont prêtes');
   // Courriels : HTML → texte, lecture à voix haute, réponse
   const mtx = require('../src/mailtext');
   const nm = mtx.normalize({ text: '<!DOCTYPE html><html><head><style>a{}</style></head><body><p>Bonjour &eacute;quipe,</p><p>Voir <a href="https://x.be">ici</a></p></body></html>' });

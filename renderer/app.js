@@ -14,7 +14,7 @@ J.onb = () => {
   const steps = [
     { id: 'profil', label: 'Ton profil', hint: 'Nom, titre et signature des textes.', done: !!String(s.profile.nom || '').trim() },
     { id: 'ia', label: 'Moteur IA', hint: s._env.configured ? 'Configuré : il reste à le tester.' : 'Choisis un moteur et colle ta clé (ou utilise Ollama, gratuit et local).', done: !!o.aiOk && !!s._env.configured },
-    { id: 'voix', label: 'Voix de Jarvis', hint: 'Une voix humaine, gratuite et hors-ligne (≈ 21 Mo).', done: (s.voice.engine === 'piper' && !!s._env.piperReady) || !!o.voiceSystem },
+    { id: 'voix', label: 'Voix de Jarvis', hint: 'Une voix féminine humaine est fournie ; tu peux choisir une voix d’homme.', done: !!s._env.piperReady },
     { id: 'micro', label: 'Micro et reconnaissance vocale', hint: 'Pour dicter et parler à Jarvis.', done: !!o.micOk },
   ];
   const n = steps.filter((x) => x.done).length;
@@ -65,6 +65,7 @@ function drawChrome() {
   const foot = document.querySelector('.side-foot'); foot.querySelector('.setup-hint')?.remove();
   const o = J.onb();
   if (!o.dismissed && !o.all) foot.insertAdjacentHTML('afterbegin', `<a class="setup-hint" href="#reglages/miseenroute">Mise en route : ${o.n}/4 · continuer</a>`);
+  if (J.notify) J.notify.paint(); // badge « Courriels » et résumé des alertes de suivi
 }
 J.drawChrome = drawChrome;
 
@@ -78,14 +79,18 @@ let a11yT = null;
 new MutationObserver(() => { clearTimeout(a11yT); a11yT = setTimeout(() => J.a11y(document.getElementById('view')), 60); }).observe(document.getElementById('view'), { childList: true, subtree: true });
 
 window.jarvis.on('navigate', (p) => J.go(p));
-window.jarvis.on('brain-updated', (d) => { if (d.added) J.toast('Jarvis a retenu ' + d.added + ' nouvelle préférence' + (d.added > 1 ? 's' : ''), 'ok'); if (location.hash.startsWith('#cerveau')) render(true); });
-window.jarvis.on('veille-done', (d) => { J.toast(d.title + ' — ' + d.body, 'ok'); if (location.hash.startsWith('#veille')) render(true); });
+// Toutes les alertes passent par le centre d'alertes (en bas à droite, cliquables).
+window.jarvis.on('brain-updated', (d) => { if (d.added) J.notify.push({ type: 'brain', title: 'Jarvis a retenu ' + d.added + ' nouvelle préférence' + (d.added > 1 ? 's' : ''), detail: 'Voir ce que Jarvis a appris', go: 'cerveau' }); if (location.hash.startsWith('#cerveau')) render(true); });
+window.jarvis.on('veille-done', (d) => { J.notify.push({ type: 'veille', title: d.title, detail: d.body, go: 'veille' }); if (location.hash.startsWith('#veille')) render(true); });
+window.jarvis.on('mail-alert', (d) => J.notify.pushMail(d));
+window.jarvis.on('mail-alerts', (c) => J.notify.setCounts(c));
+window.jarvis.on('mail-open', (d) => J.notify.openMail(d && d.key));
 window.jarvis.on('progress', (d) => { J.state.progress = d.label; const el = document.getElementById('progress'); if (el) el.textContent = d.label; });
 window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); });
 
 (async () => {
   try { await J.refreshMeta(); } catch (e) { document.getElementById('view').innerHTML = `<div class="empty err" role="alert"><b>Jarvis n'a pas pu démarrer</b>${J.esc(J.errMsg(e))}<div class="row"><button class="pri" data-act="reload">Relancer</button></div></div>`; return; }
-  drawChrome();
+  drawChrome(); J.notify.refresh();
   // Premier lancement : le parcours « Mise en route » s'ouvre dans Réglages.
   const o = J.onb();
   if (!location.hash && !J.S.firstRunDone && !o.dismissed && !o.all) { location.hash = '#reglages/miseenroute'; return; } // hashchange déclenche le rendu

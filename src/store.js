@@ -21,7 +21,7 @@ const DEFAULT_SETTINGS = {
   docs: { folders: [DOCS_DEFAULT] },
   veille: { enabled: false, time: '07:30', days: [1, 2, 3, 4, 5], topics: [], lastRun: null },
   google: { clientId: '', accounts: [] },
-  mail: { accounts: [], briefingIncludesMail: false },
+  mail: { accounts: [], briefingIncludesMail: false, watch: true, watchMinutes: 3, notifyPreview: true, followDays: 7, vip: [] },
   brain: { learning: true },
   voice: { engine: 'piper', piperVoice: 'siwis', ttsVoice: '', ttsRate: 1, autoSpeak: false, stt: 'macos', sttUrl: 'https://api.openai.com/v1', sttModel: 'whisper-1' },
   jarvis: { cloudMailOk: false, converse: false },
@@ -113,7 +113,9 @@ function normalizeSettings(s) {
   const arr = (o, k, d) => { if (!Array.isArray(o[k])) o[k] = JSON.parse(JSON.stringify(d)); };
   for (const sec of ['profile', 'ai', 'docs', 'veille', 'google', 'mail', 'brain', 'voice', 'jarvis']) if (!isObj(s[sec])) s[sec] = JSON.parse(JSON.stringify(D[sec]));
   arr(s.docs, 'folders', D.docs.folders); arr(s.veille, 'topics', []); arr(s.veille, 'days', D.veille.days);
-  arr(s.google, 'accounts', []); arr(s.mail, 'accounts', []); arr(s.profile, 'parlements', D.profile.parlements);
+  arr(s.google, 'accounts', []); arr(s.mail, 'accounts', []); arr(s.mail, 'vip', []); arr(s.profile, 'parlements', D.profile.parlements);
+  if (typeof s.mail.watch !== 'boolean') s.mail.watch = true; if (typeof s.mail.notifyPreview !== 'boolean') s.mail.notifyPreview = true;
+  s.mail.watchMinutes = Math.min(60, Math.max(1, Math.floor(Number(s.mail.watchMinutes)) || 3)); s.mail.followDays = Math.min(30, Math.max(1, Math.floor(Number(s.mail.followDays)) || 7));
   s.docs.folders = s.docs.folders.filter((x) => typeof x === 'string' && x);
   s.veille.topics = s.veille.topics.filter((t) => isObj(t));
   if (typeof s.veille.time !== 'string' || !/^\d{2}:\d{2}$/.test(s.veille.time)) s.veille.time = D.veille.time;

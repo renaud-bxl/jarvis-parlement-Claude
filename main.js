@@ -59,7 +59,33 @@ function setup() {
   });
   // Réveil du Mac : rattrapage immédiat de la veille manquée.
   try { powerMonitor.on('resume', () => setTimeout(() => scheduler.tick(), 3000)); } catch { /* ok */ }
+  // Surveillance des courriels : en pause pendant la mise en veille, rattrapage au réveil.
+  modules.mailwatch = require('./src/mailwatch');
+  try { powerMonitor.on('suspend', () => modules.mailwatch.pause()); powerMonitor.on('resume', () => modules.mailwatch.resume()); } catch { /* ok */ }
   return store;
+}
+
+// Notification macOS pour un nouveau courriel : un clic ramène la fenêtre au premier plan et ouvre le courriel dans « Courriels ».
+// Si la fenêtre est déjà au premier plan, l'alerte de l'application suffit (pas de doublon).
+const liveNotifs = new Set();
+function notifyNative({ title, body, key, urgent } = {}) {
+  try {
+    if (!Notification.isSupported() || (win && !win.isDestroyed() && win.isVisible() && win.isFocused())) return;
+    const n = new Notification({ title: String(title || 'Jarvis').slice(0, 120), body: String(body || '').slice(0, 300), silent: !urgent });
+    liveNotifs.add(n); n.on('close', () => liveNotifs.delete(n));
+    n.on('click', () => {
+      liveNotifs.delete(n);
+      if (!win || win.isDestroyed()) { createWindow(); return; }
+      if (win.isMinimized()) win.restore(); win.show(); win.focus();
+      emit('mail-open', { key: typeof key === 'string' ? key : null });
+    });
+    n.show();
+  } catch { /* notification impossible : l'alerte de l'application reste */ }
+}
+function startMailWatch() {
+  try {
+    modules.mailwatch.start({ emit, notify: notifyNative, onCounts: (c) => { try { if (app.dock) app.dock.setBadge(c && c.count ? String(c.count) : ''); } catch { /* ok */ } } });
+  } catch (e) { console.error('Surveillance des courriels :', redact(e.message)); }
 }
 
 function createWindow() {
@@ -83,6 +109,8 @@ function createWindow() {
       devTools: DEV, autoplayPolicy: 'no-user-gesture-required',
     },
   });
+  // Développement uniquement : copie la console de l'interface dans un fichier (JARVIS_CONSOLE_LOG=/chemin), jamais dans l'app installée.
+  if (process.env.JARVIS_CONSOLE_LOG && !app.isPackaged) win.webContents.on('console-message', (e, level, msg) => { try { fs.appendFileSync(process.env.JARVIS_CONSOLE_LOG, `[${level ?? e.level}] ${msg ?? e.message}\n`); } catch { /* ignoré */ } });
   win.loadFile(path.join(RENDERER_DIR, 'index.html'));
   win.webContents.setWindowOpenHandler(({ url }) => { if (externalOk(url)) shell.openExternal(url); return { action: 'deny' }; });
   win.webContents.on('will-navigate', (e, url) => { if (isOurPage(url)) return; e.preventDefault(); if (externalOk(url)) shell.openExternal(url); });
@@ -126,13 +154,18 @@ function cleanup() {
   try { modules && modules.llm.abortAll(); } catch { /* ok */ }
   try { modules && modules.indexer.cancel(); } catch { /* ok */ }
   try { modules && modules.scheduler.stop(); } catch { /* ok */ }
+  try { modules && modules.mailwatch && modules.mailwatch.stop(); } catch { /* ok */ }
 }
 app.on('before-quit', cleanup);
 app.on('will-quit', cleanup);
 process.on('exit', cleanup);
 
 if (gotLock) {
-  app.whenReady().then(() => { setup(); menu(); createWindow(); });
+  app.whenReady().then(() => {
+    setup(); menu(); createWindow(); startMailWatch();
+    // Voix de Jarvis : toujours une voix humaine (féminine par défaut, fournie avec l'application), chargée dès le démarrage.
+    try { modules.voice.ensureDefault((c, d) => emit(c, d)).then(() => modules.voice.warm()).catch(() => {}); } catch { /* sans voix : texte seulement */ }
+  });
   app.on('window-all-closed', () => app.quit());
   app.on('activate', () => { if (!win) createWindow(); });
 }

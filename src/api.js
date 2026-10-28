@@ -20,6 +20,7 @@ const SECRETS = new Set(['anthropic_key', 'openai_key', 'compat_key', 'google_cl
 const voice = require('./voice');
 const jarvis = require('./jarvis');
 const mailbox = require('./mailbox');
+const mailwatch = require('./mailwatch');
 const ics = require('./ics');
 
 // ---- Validation des arguments venant de l'interface (tout ce qui traverse l'IPC est une entrée non fiable) ----
@@ -34,6 +35,7 @@ function str(v, label, max = 2000, { empty = false } = {}) {
 }
 const idArg = (v, label = 'Identifiant') => { str(v, label, 200); if (!/^[A-Za-z0-9_.:@+-]+$/.test(v)) throw new Error(`${label} invalide.`); return v; };
 const bool = (v) => v === true;
+const intArg = (v, label, lo, hi) => { const n = typeof v === 'number' ? v : (typeof v === 'string' && /^\d{1,9}$/.test(v) ? Number(v) : NaN); if (!Number.isInteger(n) || n < lo || n > hi) throw new Error(`${label} invalide (entier de ${lo} à ${hi}).`); return n; };
 function cleanUrl(v, label, { allowEmpty = true } = {}) {
   v = String(v == null ? '' : v).trim();
   if (!v) { if (allowEmpty) return ''; throw new Error(`${label} requise.`); }
@@ -66,7 +68,7 @@ function sanitizeSettingsPatch(raw) {
   if (isObj(p.brain) && p.brain.learning !== undefined) out.brain = { learning: !!p.brain.learning };
   if (isObj(p.voice)) {
     const d = {}; const v = p.voice;
-    if (['piper', 'system'].includes(v.engine)) d.engine = v.engine;
+    if (v.engine === 'piper') d.engine = 'piper'; // la voix du système n'est jamais utilisée
     if (typeof v.piperVoice === 'string' && voice.VOICES.some((x) => x.id === v.piperVoice)) d.piperVoice = v.piperVoice;
     sOpt(v, 'ttsVoice', 200, d); sOpt(v, 'sttModel', 100, d);
     if (v.ttsRate !== undefined) { const r = Number(v.ttsRate); if (Number.isFinite(r)) d.ttsRate = Math.min(2, Math.max(0.5, r)); }
@@ -77,7 +79,15 @@ function sanitizeSettingsPatch(raw) {
   }
   if (isObj(p.google) && p.google.clientId !== undefined) out.google = { clientId: String(p.google.clientId || '').trim().slice(0, 300) };
   if (isObj(p.jarvis) && p.jarvis.converse !== undefined) out.jarvis = { converse: !!p.jarvis.converse };
-  if (isObj(p.mail) && p.mail.briefingIncludesMail !== undefined) out.mail = { briefingIncludesMail: !!p.mail.briefingIncludesMail };
+  if (isObj(p.mail)) { // la liste des urgents (mail.vip) et les comptes ont leurs propres méthodes validées
+    const d = {}; const m = p.mail; const int = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.floor(Number(v)) || lo));
+    if (m.briefingIncludesMail !== undefined) d.briefingIncludesMail = !!m.briefingIncludesMail;
+    if (m.watch !== undefined) d.watch = !!m.watch;
+    if (m.notifyPreview !== undefined) d.notifyPreview = !!m.notifyPreview;
+    if (m.watchMinutes !== undefined && Number.isFinite(Number(m.watchMinutes))) d.watchMinutes = int(m.watchMinutes, 1, 60);
+    if (m.followDays !== undefined && Number.isFinite(Number(m.followDays))) d.followDays = int(m.followDays, 1, 30);
+    if (Object.keys(d).length) out.mail = d;
+  }
   return out;
 }
 
@@ -284,8 +294,35 @@ function create(ctx) {
     // ---- Boîte mail intelligente (lecture seule ; rien n'est envoyé ni créé sans validation) ----
     'mailbox.triage': (a) => { a = obj(a); return mailbox.triage({ allowCloud: a.allowCloud === true, force: a.force === true, accounts: Array.isArray(a.accounts) ? a.accounts.map((x) => idArg(x)) : undefined, limit: a.limit }); },
     'mailbox.status': ({ key, status } = {}) => mailbox.setStatus({ key: idArg(key, 'Courriel'), status: str(status, 'Statut', 20) }),
-    'mailbox.message': ({ key } = {}) => mailbox.getMessage(idArg(key, 'Courriel')),
+    'mailbox.message': ({ key } = {}) => mailbox.loadMessage(idArg(key, 'Courriel')),
     'mailbox.consent': ({ always } = {}) => { store.settings.set({ jarvis: { cloudMailOk: always === true } }); return true; },
+    // Alerte suivi, expéditeurs urgents, historique local, surveillance en arrière-plan (tout est lecture seule côté serveur de courriel).
+    'mailbox.alerts': () => mailbox.alerts(),
+    'mailbox.alertCount': () => mailbox.alertCount(),
+    'mailbox.snooze': ({ key, days } = {}) => mailbox.snooze({ key: idArg(key, 'Courriel'), days: intArg(days, 'Durée du rappel', 1, 30) }),
+    'mailbox.history': (a) => {
+      a = obj(a); const day = (v, l) => { if (v === undefined || v === null || v === '') return undefined; if (typeof v !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(v)) throw new Error(`${l} invalide.`); return v; };
+      const category = a.category ? String(a.category) : ''; if (category && !mailbox.PRIORITY.includes(category)) throw new Error('Catégorie inconnue.');
+      const status = a.status === undefined || a.status === '' ? 'all' : String(a.status); if (!['all', 'open', 'done'].includes(status)) throw new Error('Statut inconnu.');
+      return mailbox.history({ category, account: a.account ? idArg(a.account, 'Compte') : undefined, q: a.q === undefined ? '' : str(a.q, 'Recherche', 200, { empty: true }), from: day(a.from, 'Date de début'), to: day(a.to, 'Date de fin'), status, limit: intArg(a.limit === undefined ? 50 : a.limit, 'Limite', 1, 200), offset: intArg(a.offset === undefined ? 0 : a.offset, 'Décalage', 0, 1000000) });
+    },
+    'mailbox.vip.list': () => ({ ok: true, vip: mailbox.vipList(), max: mailbox.VIP_MAX }),
+    'mailbox.vip.add': (a) => {
+      a = obj(a); const label = a.label === undefined || a.label === null ? '' : str(a.label, 'Nom', 200, { empty: true });
+      if (a.key !== undefined && a.key !== null) { if (a.scope !== 'address' && a.scope !== 'domain') throw new Error("Choisissez « cette adresse » ou « tout le domaine »."); return mailbox.vipAdd({ key: idArg(a.key, 'Courriel'), scope: a.scope, label }); }
+      return mailbox.vipAdd({ pattern: str(a.pattern, 'Adresse', 300), label });
+    },
+    'mailbox.vip.remove': ({ pattern } = {}) => mailbox.vipRemove({ pattern: str(pattern, 'Adresse', 300) }),
+    'mailbox.watch.status': () => mailwatch.status(),
+    'mailbox.watch.run': () => mailwatch.runOnce({ manual: true }),
+    'mailbox.watch.configure': (a) => {
+      a = obj(a); const d = {};
+      if (a.watch !== undefined) d.watch = a.watch === true;
+      if (a.notifyPreview !== undefined) d.notifyPreview = a.notifyPreview === true;
+      if (a.watchMinutes !== undefined) d.watchMinutes = intArg(a.watchMinutes, 'Fréquence', 1, 60);
+      if (a.followDays !== undefined) d.followDays = intArg(a.followDays, 'Délai de suivi', 1, 30);
+      store.settings.set({ mail: d }); mailwatch.reschedule(); return mailwatch.status();
+    },
     'mailbox.event.save': ({ key, event } = {}) => { mailbox.saveEvent({ key: idArg(key, 'Courriel'), event: obj(event) }); return true; },
     // Ajouter à l'agenda : Google Agenda s'ouvre dans le navigateur, pré-rempli ; Agenda d'Apple (et tout autre) reçoit un fichier .ics. L'utilisateur valide dans l'agenda.
     'mailbox.event.open': async ({ key, target, event } = {}) => {
@@ -322,10 +359,12 @@ function create(ctx) {
     // ---- Voix ----
     'voice.transcribe': (a) => voice.transcribe(obj(a)),
     'voice.status': () => voice.status(),
+    'voice.ensure': () => voice.ensureDefault(ctx.emit),
     'voice.install': ({ voiceId } = {}) => voice.install(str(voiceId, 'Voix', 50), ctx.emit),
     'voice.removeVoice': ({ voiceId } = {}) => voice.removeVoice(str(voiceId, 'Voix', 50)),
     'voice.synth': ({ text } = {}) => voice.synth(str(text, 'Texte', 20000, { empty: true })),
     'voice.micStatus': async ({ ask } = {}) => {
+      if (process.env.JARVIS_FAKE_MIC === '1' && !ctx.app.isPackaged) return 'granted'; // tests avec micro simulé (jamais dans l'app installée)
       const sp = ctx.systemPreferences; if (!sp || process.platform !== 'darwin') return 'granted';
       const st = sp.getMediaAccessStatus('microphone');
       if (st === 'not-determined' && ask === false) return st; // afficher l'état sans ouvrir la demande système

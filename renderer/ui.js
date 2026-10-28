@@ -330,47 +330,37 @@ J.stopSpeak = () => {
   if (curRelease) { const r = curRelease; curRelease = null; r(); }
   if (window.speechSynthesis) speechSynthesis.cancel();
 };
-// Lecture avec la voix du système, phrase par phrase (arrêt immédiat, pas de coupure des longs textes).
-const systemSpeak = async (chunks, my) => {
-  if (!window.speechSynthesis) { J.toast('Synthèse vocale indisponible', 'err'); return; }
-  const v = J.S?.voice || {}; const voices = J.voices();
-  const voice = voices.find((x) => x.name === v.ttsVoice) || voices.find((x) => /fr-BE/i.test(x.lang)) || voices.find((x) => /fr-FR/i.test(x.lang)) || voices[0];
-  for (const c of chunks) {
-    if (my !== speakToken) return;
-    await new Promise((resolve) => {
-      const u = new SpeechSynthesisUtterance(c); u.lang = voice?.lang || 'fr-FR'; if (voice) u.voice = voice; u.rate = Math.min(1.6, Math.max(0.5, Number(v.ttsRate) || 1));
-      let ended = false; const done = () => { if (!ended) { ended = true; clearTimeout(guard); if (curRelease === done) curRelease = null; resolve(); } };
-      const guard = setTimeout(done, 3000 + c.length * 120);
-      curRelease = done; u.onend = u.onerror = done; speechSynthesis.speak(u);
-    });
-  }
-};
 const playWav = (b64, token) => new Promise((res) => {
   if (token !== speakToken) return res();
   const a = new Audio('data:audio/wav;base64,' + b64); curAudio = a;
   const done = () => { if (curRelease === done) curRelease = null; if (curAudio === a) curAudio = null; res(); };
   curRelease = done; a.onended = a.onerror = done; a.play().catch(done);
 });
-// Parler : voix Piper (open source, hors-ligne) si installée, sinon voix macOS.
+// Parler : toujours une voix humaine (Piper, open source, hors-ligne). La voix du Mac n'est JAMAIS utilisée : si la voix n'est pas encore prête, Jarvis la prépare et reste muet en attendant.
 J.speak = async (text) => {
   J.stopSpeak(); const my = speakToken; const chunks = J.chunks(text); if (!chunks.length) return;
   J.speaking = true; try { await speakInner(chunks, my); } finally { if (my === speakToken) J.speaking = false; }
 };
-const speakInner = async (chunks, my) => {
-  let rest = chunks;
-  if ((J.S?.voice?.engine) === 'piper' && J.S?._env?.piperReady) {
-    const jobs = []; const fetchAt = (i) => { if (i < chunks.length && !jobs[i]) { jobs[i] = J.call('voice.synth', { text: chunks[i] }); jobs[i].catch(() => {}); } };
-    fetchAt(0); fetchAt(1); let i = 0;
-    try {
-      for (; i < chunks.length; i++) {
-        const wav = await jobs[i]; if (my !== speakToken) return;
-        fetchAt(i + 2); // pré-génération des morceaux suivants pendant la lecture
-        if (wav) await playWav(wav, my); if (my !== speakToken) return;
-      }
-      return;
-    } catch (e) { if (my !== speakToken) return; if (!J.state.piperWarned) { J.state.piperWarned = true; J.toast('Voix Piper indisponible, voix système utilisée : ' + e.message, 'err'); } rest = chunks.slice(i); }
+let voicePrep = null;
+J.ensureVoice = () => {
+  if (J.S?._env?.piperReady) return Promise.resolve(true);
+  if (!voicePrep) {
+    if (!J.state.voiceToast) { J.state.voiceToast = true; J.toast('Je prépare ma voix… (quelques secondes)', 'ok'); }
+    voicePrep = J.call('voice.ensure').then(() => J.refreshMeta()).then(() => !!J.S?._env?.piperReady).catch((e) => { J.toast('Ma voix n’a pas pu être préparée : ' + e.message, 'err'); return false; }).finally(() => { voicePrep = null; });
   }
-  await systemSpeak(rest, my);
+  return voicePrep;
+};
+const speakInner = async (chunks, my) => {
+  if (!J.S?._env?.piperReady && !(await J.ensureVoice())) return; if (my !== speakToken) return;
+  const jobs = []; const fetchAt = (i) => { if (i < chunks.length && !jobs[i]) { jobs[i] = J.call('voice.synth', { text: chunks[i] }); jobs[i].catch(() => {}); } };
+  fetchAt(0); fetchAt(1);
+  try {
+    for (let i = 0; i < chunks.length; i++) {
+      const wav = await jobs[i]; if (my !== speakToken) return;
+      fetchAt(i + 2); // pré-génération des morceaux suivants pendant la lecture
+      if (wav) await playWav(wav, my); if (my !== speakToken) return;
+    }
+  } catch (e) { if (my !== speakToken) return; if (!J.state.piperWarned) { J.state.piperWarned = true; J.toast('Ma voix est momentanément indisponible : ' + e.message, 'err'); } }
 };
 J.act.speakEl = (el) => { const t = document.querySelector(el.dataset.sel); J.speak(t ? (t.value ?? t.innerText) : ''); };
 J.act.speakStop = () => J.stopSpeak();
@@ -438,6 +428,52 @@ J.listen = async ({ vad = true, maxMs = 45000, noSpeechMs = 8000, endSilenceMs =
   };
   src.connect(proc); proc.connect(ctx.destination);
   return { done, stop: () => finish('manual') };
+};
+// Micro OUVERT EN CONTINU (écoute du mot de réveil) : le flux reste ouvert, chaque phrase détectée est envoyée à onSegment sans jamais couper l'écoute pendant la transcription.
+// hold() suspend la capture (Jarvis parle, traitement en cours) ; la capture reprend 450 ms après le dernier hold() relâché (pas d'écho).
+J.listenStream = async ({ onSegment, onLevel, onSpeechStart, endSilenceMs = 1300, maxSegMs = 25000 } = {}) => {
+  let st = 'granted'; try { st = await J.call('voice.micStatus'); } catch { /* hors Electron */ }
+  if (st !== 'granted') throw micError('Micro refusé', 'MIC');
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } }); }
+  catch (err) {
+    const n = (err && err.name) || '';
+    if (/NotAllowed|Security/.test(n)) throw micError('Micro refusé', 'MIC');
+    if (/NotFound|Overconstrained|DevicesNotFound/.test(n)) throw micError('Aucun micro détecté. Branchez un micro ou choisissez-en un dans Réglages Système › Son › Entrée.', 'NOMIC');
+    if (/NotReadable|Abort|TrackStart/.test(n)) throw micError('Le micro est utilisé par une autre application. Fermez-la puis réessayez.', 'BUSY');
+    throw micError('Micro inaccessible : ' + ((err && err.message) || n), 'MICERR');
+  }
+  const ctx = new AudioContext(); if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+  const src = ctx.createMediaStreamSource(stream); const proc = ctx.createScriptProcessor(4096, 1, 1);
+  let frames = [], cal = [], noise = 0.005, run = 0, spoke = false, first = 0, last = 0, voiced = 0, lastVoice = 0, segStart = 0, peak = 0, closed = false, holds = 0, resumeAt = 0;
+  const info = { maxRms: 0, lastSoundAt: performance.now(), startedAt: performance.now(), segments: 0 };
+  const reset = () => { frames = []; spoke = false; run = 0; voiced = 0; peak = 0; };
+  const emit = () => {
+    if (spoke && voiced >= 3) { const a = Math.max(0, first - 4), b = Math.min(frames.length, last + 4); const wav = encodeWav(frames.slice(a, b), ctx.sampleRate); info.segments++; try { onSegment({ wav, ms: Math.round(performance.now() - segStart), peak }); } catch { /* ignoré */ } }
+    reset();
+  };
+  proc.onaudioprocess = (e) => {
+    if (closed) return;
+    const d = e.inputBuffer.getChannelData(0); let sum = 0; for (let i = 0; i < d.length; i++) sum += d[i] * d[i]; const rms = Math.sqrt(sum / d.length); const now = performance.now();
+    if (rms > info.maxRms) info.maxRms = rms; if (rms > 0.002) info.lastSoundAt = now;
+    if (onLevel) onLevel(rms);
+    if (holds > 0 || now < resumeAt) { if (spoke || frames.length) reset(); return; }
+    if (cal.length < 5 && rms < 0.15) { cal.push(rms); const s2 = [...cal].sort((x, y) => x - y); noise = Math.min(0.04, s2[Math.floor(s2.length / 2)]); return; }
+    frames.push(new Float32Array(d)); if (!spoke && frames.length > 8) frames.shift(); // tampon de quelques trames avant la parole
+    const thr = Math.max(0.014, noise * 3), low = thr * 0.6;
+    if (rms > thr) { run++; if (run >= 2 && !spoke) { spoke = true; first = Math.max(0, frames.length - 3); last = frames.length - 1; lastVoice = now; segStart = now; if (onSpeechStart) onSpeechStart(); } }
+    else { run = 0; if (!spoke) noise = noise * 0.96 + Math.min(rms, 0.04) * 0.04; }
+    if (spoke && rms > low) { lastVoice = now; last = frames.length - 1; if (rms > thr) voiced++; if (rms > peak) peak = rms; }
+    if (spoke && (now - lastVoice > endSilenceMs || now - segStart > maxSegMs)) emit();
+  };
+  const tr = stream.getAudioTracks()[0];
+  const close = () => { if (closed) return; closed = true; try { proc.disconnect(); src.disconnect(); } catch { /* ok */ } stream.getTracks().forEach((t) => t.stop()); ctx.close().catch(() => {}); };
+  if (tr) tr.onended = () => { close(); if (onLevel) onLevel(0); };
+  src.connect(proc); proc.connect(ctx.destination);
+  return {
+    info, stop: close, get closed() { return closed; },
+    hold() { holds++; reset(); let done = false; return () => { if (done) return; done = true; holds = Math.max(0, holds - 1); resumeAt = performance.now() + 450; }; },
+  };
 };
 J.transcribe = async (wav) => (await J.call('voice.transcribe', { audio: wav, mime: 'audio/wav' })).text;
 

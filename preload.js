@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 // Seuls ces événements du processus principal peuvent être écoutés par l'interface.
-const CHANNELS = new Set(['progress', 'brain-updated', 'veille-done', 'navigate']);
+const CHANNELS = new Set(['progress', 'brain-updated', 'veille-done', 'navigate', 'mail-alert', 'mail-alerts', 'mail-open']);
 
 contextBridge.exposeInMainWorld('jarvis', {
   call: async (method, args) => {

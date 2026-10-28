@@ -76,7 +76,7 @@ J.drawOnb = () => {
     const pri = i === open ? 'pri' : '';
     if (s.id === 'profil') return `<button class="sm ${pri}" data-act="obGo" data-sec="sec-profil" data-focus="#pNom">Renseigner</button>`;
     if (s.id === 'ia') return J.S._env.configured ? `<button class="sm ${pri}" data-act="testAI">Tester le moteur</button>` : `<button class="sm ${pri}" data-act="obGo" data-sec="sec-ia" data-focus="#aProv">Configurer</button>`;
-    if (s.id === 'voix') return `<button class="sm ${pri}" data-act="obGo" data-sec="sec-voix" data-focus="#vPiper button">Choisir une voix</button><button class="sm ghost" data-act="obVoiceSys">Voix du Mac</button>`;
+    if (s.id === 'voix') return `<button class="sm ${pri}" data-act="obGo" data-sec="sec-voix" data-focus="#vPiper button">Choisir ma voix (femme ou homme)</button>`;
     return `<button class="sm ${pri}" data-act="obMic">Autoriser le micro</button>`;
   };
   box.innerHTML = `<div class="card onb" role="region" aria-label="Mise en route"><div class="row sp"><h2 style="margin:0">Mise en route · Étape ${open + 1}/4</h2><button class="sm ghost" data-act="obLater">Plus tard</button></div>
@@ -86,7 +86,6 @@ J.drawOnb = () => {
 J.act.obGo = (el) => { const sec = document.getElementById(el.dataset.sec); scrollToEl(sec); const f = sec && sec.querySelector(el.dataset.focus || 'input,select'); if (f) setTimeout(() => f.focus({ preventScroll: true }), calm() ? 0 : 400); };
 J.act.obLater = async () => { await setOnb({ dismissed: true }); J.toast('Tu peux la retrouver plus tard dans les Réglages.', 'ok'); };
 J.act.obFinish = async () => { await setOnb({ done: true }); J.go('accueil'); };
-J.act.obVoiceSys = async () => { await J.call('settings.set', { voice: { engine: 'system' } }); await setOnb({ voiceSystem: true }); J.drawPiper && J.drawPiper(); J.toast('Voix du Mac utilisée. Tu pourras installer une voix Jarvis à tout moment.', 'ok'); };
 // Micro : demande l'autorisation, puis propose un petit test de dictée (qui déclenche aussi l'autorisation de reconnaissance vocale de macOS).
 J.act.obMic = (el) => J.busy(el, async () => {
   const st = await J.call('voice.micStatus');
@@ -132,16 +131,15 @@ J.pages.reglages = async (root, arg) => {
     <div class="card" id="sec-voix"><h2>${J.hi('speaker')}Voix et micro</h2>
       <p class="muted small"><b>Parler</b> : voix humaines françaises open source (modèles <a data-ext="1" href="https://github.com/rhasspy/piper">Piper</a>), gratuites et 100 % hors-ligne : deux voix de femme, deux voix d'homme. Choisis la tienne ci-dessous. <b>Écouter</b> : reconnaissance vocale de macOS, gratuite et intégrée (rien à configurer). Whisper reste possible en option ci-dessous.</p>
       <h3>Voix de Jarvis</h3><div id="vPiper" class="muted small">Chargement des voix…</div>
-      <div class="grid g3" style="margin-top:8px"><div><label class="f">Vitesse</label><input id="vRate" type="range" min="0.7" max="1.4" step="0.05" value="${s.voice.ttsRate}"></div>
-      <div><label class="f">Voix système (secours)</label><select id="vVoice"></select></div><div><label class="f" style="visibility:hidden">Test</label><div class="row"><button data-act="vTest">${J.icon('speaker')} Tester la voix</button><button class="ghost" data-act="speakStop" aria-label="Arrêter la lecture">${J.icon('stop')}</button></div></div></div>
+      <div class="grid g2" style="margin-top:8px"><div><label class="f">Vitesse</label><input id="vRate" type="range" min="0.7" max="1.4" step="0.05" value="${s.voice.ttsRate}"></div>
+      <div><label class="f" style="visibility:hidden">Test</label><div class="row"><button data-act="vTest">${J.icon('speaker')} Tester la voix</button><button class="ghost" data-act="speakStop" aria-label="Arrêter la lecture">${J.icon('stop')}</button></div></div></div>
       <h3 style="margin-top:14px">Écoute (transcription)</h3>
       <div class="grid g3"><div><label class="f">Serveur de transcription</label><input id="vUrl" value="${J.esc(s.voice.sttUrl)}"></div><div><label class="f">Modèle</label><input id="vModel" value="${J.esc(s.voice.sttModel)}"></div><div><label class="f">Clé (inutile en local)</label><input id="vKey" type="password" autocomplete="off" placeholder="${s._secrets.stt_key ? '•••••• (enregistrée)' : 'sk-…'}"></div></div>
       <div class="row" style="margin-top:10px"><button class="pri" data-act="vSave">Enregistrer</button><button data-act="obMic">Vérifier le micro</button><span class="pill ${s._env.sttReady ? 'ok' : 'warn'}">${s._env.sttReady ? 'Écoute prête' : 'Écoute non configurée'}</span>${s.onboarding?.micOk ? '<span class="pill ok">Micro autorisé</span>' : ''}<span class="muted small" id="progress" aria-live="polite"></span></div></div>
     <div class="card" id="sec-app"><h2>${J.hi('gear')}Application</h2><div class="row"><label class="chk" style="margin:0"><input type="checkbox" id="oLogin" ${s.app?.loginItem ? 'checked' : ''}> Lancer Jarvis à l'ouverture de session</label><button class="sm" data-act="saveLogin">Appliquer</button><button class="sm" data-act="openData">Ouvrir le dossier de données</button></div>
       <p class="muted small">Les clés et mots de passe sont chiffrés par le trousseau macOS ${s._env.encrypted ? '(actif)' : '(indisponible : les clés ne pourront pas être enregistrées en sécurité)'}. Aucune télémétrie.</p></div>`;
   J.drawOnb();
-  const fillVoices = () => { const vs = J.voices(); document.getElementById('vVoice').innerHTML = vs.length ? vs.map((v) => `<option value="${J.esc(v.name)}" ${v.name === s.voice.ttsVoice ? 'selected' : ''}>${J.esc(v.name)} (${v.lang})</option>`).join('') : '<option value="">Voix par défaut</option>'; };
-  J.drawPiper(); fillVoices(); if (window.speechSynthesis) speechSynthesis.onvoiceschanged = fillVoices;
+  J.drawPiper();
   document.getElementById('aProv').addEventListener('change', (e) => {
     const v = e.target.value; document.getElementById('provAnthropic').hidden = v !== 'anthropic'; document.getElementById('provOpenAI').hidden = v !== 'openai-cloud'; document.getElementById('provLocal').hidden = !(v === 'ollama' || v === 'openai');
     if (v === 'ollama') document.getElementById('aBase').value = 'http://localhost:11434/v1'; if (v === 'openai' && /api\.openai\.com|11434/.test(J.val('aBase'))) document.getElementById('aBase').value = 'http://localhost:1234/v1';
@@ -190,16 +188,15 @@ J.act.testAI = (el) => J.busy(el, async () => {
 J.drawPiper = async () => {
   const box = document.getElementById('vPiper'); if (!box) return;
   const st = await J.call('voice.status'); const cur = J.S.voice.engine === 'piper' && st.voices.find((x) => x.id === J.S.voice.piperVoice)?.installed ? J.S.voice.piperVoice : '';
-  box.innerHTML = st.voices.map((v) => `<div class="line" style="border-bottom:1px solid var(--line)"><span style="white-space:normal"><b>${J.esc(v.label)}</b> <span class="pill">${J.esc(v.gender)}</span> ${v.installed ? '<span class="pill ok">installée</span>' : `<span class="muted">≈ ${v.mb} Mo</span>`} ${cur === v.id ? '<span class="pill gold">utilisée</span>' : ''}</span>
-    <span class="row" style="flex:none">${v.installed ? `<button class="sm" data-act="vUse" data-id="${v.id}">${J.icon('speaker')} Écouter et utiliser</button><button class="sm danger" data-act="vDel" data-id="${v.id}">Supprimer</button>` : `<button class="sm pri" data-act="vInstall" data-id="${v.id}">Télécharger et utiliser</button>`}</span></div>`).join('')
-    + `<div class="row" style="margin-top:8px"><label class="chk" style="margin:0"><input type="radio" name="vEng" id="vEngSys" ${cur ? '' : 'checked'}> Utiliser la voix système macOS à la place</label></div>`;
-  document.getElementById('vEngSys').addEventListener('change', async () => { await J.call('settings.set', { voice: { engine: 'system' }, onboarding: { voiceSystem: true } }); await J.refreshMeta(); J.drawChrome(); J.drawPiper(); J.drawOnb(); });
+  box.innerHTML = st.voices.map((v) => `<div class="line" style="border-bottom:1px solid var(--line)"><span style="white-space:normal"><b>${J.esc(v.label)}</b> <span class="pill">${J.esc(v.gender)}</span> ${v.installed ? `<span class="pill ok">${v.bundled ? 'fournie avec l’application' : 'installée'}</span>` : `<span class="muted">≈ ${v.mb} Mo</span>`} ${cur === v.id ? '<span class="pill gold">utilisée</span>' : ''}</span>
+    <span class="row" style="flex:none">${v.installed ? `<button class="sm" data-act="vUse" data-id="${v.id}">${J.icon('speaker')} Écouter et utiliser</button>${v.bundled ? '' : `<button class="sm danger" data-act="vDel" data-id="${v.id}">Supprimer</button>`}` : `<button class="sm pri" data-act="vInstall" data-id="${v.id}">Télécharger et utiliser</button>`}</span></div>`).join('')
+    + '<p class="muted small" style="margin-top:8px">Jarvis parle toujours avec une voix humaine : la voix de ton ordinateur n’est jamais utilisée.</p>';
 };
 J.act.vInstall = (el) => J.busy(el, async () => { await J.call('voice.install', { voiceId: el.dataset.id }); await J.refreshMeta(); J.drawChrome(); J.toast('Voix installée et activée', 'ok'); J.drawPiper(); J.drawOnb(); }, 'Téléchargement…');
 J.act.vUse = async (el) => { await J.call('settings.set', { voice: { engine: 'piper', piperVoice: el.dataset.id } }); await J.refreshMeta(); J.drawPiper(); J.drawOnb(); J.speak('Bonjour, je suis Jarvis. Voici ma voix.'); };
-J.act.vDel = async (el) => { if (!await J.confirm('Supprimer cette voix de ton Mac ? Tu pourras la télécharger à nouveau.', { ok: 'Supprimer', danger: true, title: 'Supprimer la voix' })) return; await J.call('voice.removeVoice', { voiceId: el.dataset.id }); if (J.S.voice.piperVoice === el.dataset.id) await J.call('settings.set', { voice: { engine: 'system' } }); await J.refreshMeta(); J.drawPiper(); J.drawOnb(); };
-J.act.vTest = () => { J.S.voice = { ...J.S.voice, ttsVoice: J.val('vVoice'), ttsRate: J.val('vRate') }; J.call('settings.set', { voice: { ttsRate: Number(J.val('vRate')), ttsVoice: J.val('vVoice') } }); J.speak('Bonjour, je suis Jarvis. Je suis prêt à travailler avec vous.'); };
-J.act.vSave = (el) => J.busy(el, async () => { await J.call('settings.set', { voice: { ttsVoice: J.val('vVoice'), ttsRate: Number(J.val('vRate')), sttUrl: J.val('vUrl').trim(), sttModel: J.val('vModel').trim() } }); const k = J.val('vKey'); if (k && k.trim()) { await J.call('secret.set', { name: 'stt_key', value: k.trim() }); document.getElementById('vKey').value = ''; } await J.refreshMeta(); J.toast('Voix enregistrée', 'ok'); }, 'Enregistrement…');
+J.act.vDel = async (el) => { if (!await J.confirm('Supprimer cette voix de ton Mac ? Tu pourras la télécharger à nouveau.', { ok: 'Supprimer', danger: true, title: 'Supprimer la voix' })) return; await J.call('voice.removeVoice', { voiceId: el.dataset.id }); if (J.S.voice.piperVoice === el.dataset.id) await J.call('settings.set', { voice: { engine: 'piper', piperVoice: 'siwis' } }); await J.refreshMeta(); J.drawPiper(); J.drawOnb(); };
+J.act.vTest = async () => { J.S.voice = { ...J.S.voice, ttsRate: J.val('vRate') }; await J.call('settings.set', { voice: { ttsRate: Number(J.val('vRate')) } }); J.speak('Bonjour, je suis Jarvis. Je suis prêt à travailler avec vous.'); };
+J.act.vSave = (el) => J.busy(el, async () => { await J.call('settings.set', { voice: { ttsRate: Number(J.val('vRate')), sttUrl: J.val('vUrl').trim(), sttModel: J.val('vModel').trim() } }); const k = J.val('vKey'); if (k && k.trim()) { await J.call('secret.set', { name: 'stt_key', value: k.trim() }); document.getElementById('vKey').value = ''; } await J.refreshMeta(); J.toast('Voix enregistrée', 'ok'); }, 'Enregistrement…');
 J.act.vMic = (el) => J.act.obMic(el);
 J.act.saveLogin = async () => { const want = J.val('oLogin'); const on = await J.call('app.loginItem', { enabled: want }); await J.call('settings.set', { app: { loginItem: !!on } }); J.toast(on ? 'Jarvis se lancera à l\'ouverture de session' : 'Lancement automatique désactivé', 'ok'); };
 J.act.openData = () => J.call('app.openDataDir');
@@ -214,6 +211,7 @@ J.act.runDiag = (el) => J.busy(el, async () => {
   out.innerHTML = '<p class="muted small">Les contrôles peuvent prendre quelques secondes (moteur IA, comptes, réseau)…</p>' + J.skeleton(3);
   let r; try { r = await J.call('diag.run'); } catch (e) { out.innerHTML = `<div class="empty err" role="alert"><b>Le diagnostic n'a pas pu s'exécuter</b>${J.esc(J.errMsg(e))}</div>`; throw e; }
   J.state.diag = r;
+  if (!document.getElementById('dSum') || !document.getElementById('dOut')) return; // l'utilisateur a quitté la page pendant le diagnostic
   const ko = r.checks.filter((c) => c.status === 'ko').length, warn = r.checks.filter((c) => c.status === 'warn').length;
   document.getElementById('dSum').innerHTML = `<span class="pill ${ko ? 'ko' : warn ? 'warn' : 'ok'}">${ko ? ko + ' problème' + (ko > 1 ? 's' : '') : warn ? warn + ' point' + (warn > 1 ? 's' : '') + ' à voir' : 'Tout est en ordre'}</span> <span class="muted small">${J.esc(r.summary)}</span>`;
   out.innerHTML = r.checks.map((c) => `<div class="diag"><span class="pill ${c.status}">${{ ok: 'OK', warn: 'À voir', ko: 'Problème' }[c.status] || J.esc(c.status)}</span><b>${J.esc(c.name)}</b><span class="muted">${J.esc(c.detail)}</span></div>`).join('') + `<div style="margin-top:12px"><button class="sm" data-act="dCopyDiag">${J.icon('copy')} Copier le rapport</button></div>`;

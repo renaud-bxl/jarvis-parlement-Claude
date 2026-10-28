@@ -95,3 +95,14 @@
 @media (max-width:1100px){.jv-hello .h1{font-size:36px}.jv-bar{flex-wrap:wrap}.jv-mic{min-width:0}}
 @media (max-height:720px){.jv-eyebrow{display:none}.jv-hello{min-height:70px}.jv-hello .h1{font-size:32px}.jv-hello .h2{font-size:21px}.jv{padding-top:4px}.jv-msg{font-size:14.5px}.jv-lines{font-size:14px}}
 .jv-tri{max-height:52vh}.jv-tri .mb-card{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:#eaf1ff}.jv-tri .mb-m,.jv-tri .mb-sd{color:#9db3d8}.jv-tri .mb-pill{background:rgba(255,255,255,.07);color:#eaf1ff;border-color:rgba(255,255,255,.22);cursor:default}.jv-tri .mb-pill b{background:rgba(255,255,255,.16);color:#fff}.jv-tri .mb-pill.hot b{background:#ffd21f;color:#0a1f3f}.jv-tri .mb-ev{background:rgba(79,143,240,.16);border-color:rgba(120,170,255,.4)}.jv-tri .mb-why{background:rgba(255,159,28,.18);color:#ffe2b0}
+/* Bouton micro (activé / coupé), niveau sonore et dernière phrase entendue */
+.jv-micmode{display:inline-flex;gap:9px;align-items:center;padding:7px 14px;border-radius:99px;border:1px solid rgba(160,200,255,.35);background:rgba(10,30,70,.6);color:#cfe0ff;font-size:13px;font-weight:600;cursor:pointer}
+.jv-micmode .dot{width:9px;height:9px;border-radius:50%;background:#7f99c9;box-shadow:none}
+.jv-micmode[data-on="1"]{border-color:var(--jy);background:rgba(255,210,31,.12);color:#ffe36b}
+.jv-micmode[data-on="1"] .dot{background:#38d27a;box-shadow:0 0 10px #38d27a}
+.jv-micmode:hover{border-color:var(--jy)}
+.jv-meter{display:inline-block;width:54px;height:6px;border-radius:99px;background:rgba(255,255,255,.18);overflow:hidden}
+.jv-meter b{display:block;height:100%;width:0;background:#38d27a;border-radius:99px;transition:width .08s linear}
+.jv-heard{font-size:12.5px;color:#9db3d8;min-height:18px;margin-top:4px;text-align:center;max-width:760px}
+.jv-heard[data-kind="ignored"]{opacity:.75}
+@media (prefers-reduced-motion:reduce){.jv-meter b{transition:none}}

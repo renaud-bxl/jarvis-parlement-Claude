@@ -1,14 +1,14 @@
 {
   "name": "jarvis-parlement",
   "productName": "Jarvis Parlement",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Assistant parlementaire complet : veille, recherche, rédaction, courriels, agenda — avec un cerveau qui apprend vos préférences.",
   "main": "main.js",
   "author": "Jarvis Parlement",
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node scripts/smoke-test.js && node scripts/test-agenda.js && node scripts/test-mailbox.js && node scripts/test-mail.js && node scripts/test-jarvis.js",
+    "test": "node scripts/smoke-test.js && node scripts/test-agenda.js && node scripts/test-mailbox.js && node scripts/test-mail.js && node scripts/test-jarvis.js && node scripts/test-wake.js && node scripts/test-mailwatch.js",
     "icon": "node scripts/make-icon.js",
     "dist": "bash scripts/build-native.sh && electron-builder --mac --publish never",
     "build:native": "bash scripts/build-native.sh"
@@ -86,6 +86,10 @@
       {
         "from": "native/build/jarvis-speak",
         "to": "jarvis-speak"
+      },
+      {
+        "from": "native/build/voices",
+        "to": "voices"
       }
     ]
   }

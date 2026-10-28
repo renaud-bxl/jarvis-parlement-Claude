@@ -25,3 +25,12 @@ clang -O2 -arch arm64 -arch x86_64 -mmacosx-version-min=13.4 speak.c -I. -o buil
   "$L/libespeak-ng.a" "$L/libucd.a" "$L/libonnxruntime.a" -lc++ -framework Foundation -framework CoreFoundation
 codesign --force --sign - build/jarvis-speak
 echo "✓ native/build/jarvis-speak ($(lipo -archs build/jarvis-speak))"
+
+# Voix féminine par défaut (Siwis) incluse dans l'application : disponible dès l'installation, sans téléchargement ni voix du système.
+VM="vits-piper-fr_FR-siwis-medium-int8"
+if [ ! -f "build/voices/$VM/tokens.txt" ]; then
+  mkdir -p build/voices
+  curl -fsSL -o "build/voices/$VM.tar.bz2" "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$VM.tar.bz2"
+  tar -xjf "build/voices/$VM.tar.bz2" -C build/voices && rm -f "build/voices/$VM.tar.bz2"
+fi
+test -f "build/voices/$VM/tokens.txt" && echo "✓ native/build/voices/$VM"

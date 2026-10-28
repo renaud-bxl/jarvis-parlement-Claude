@@ -415,6 +415,7 @@
     const draft = !pre.to && !pre.subject && !pre.body ? J.mailDraft.get(composeKey) : null; const showDraft = hasContent(draft) ? draft : null;
     root.innerHTML = `<div id="mailRoot"><h1>Courriels</h1><p class="sub">Lecture seule (rien n'est marqué comme lu), résumé à la demande, envoi uniquement après ta validation explicite.</p>
     <div id="smartBox"></div>
+    <div id="mbSettings"></div>
     <div class="card"><div class="row sp"><h2>Comptes</h2><span class="row"><button data-act="addMail">+ Compte IMAP/SMTP</button><a class="btn" href="#agenda" style="text-decoration:none">+ Compte Google</a></span></div>
     ${accs.map((a) => `<div class="mail-acc"><div class="row sp"><span>${a.type === 'google' ? '🟢' : '✉️'} <b>${J.esc(a.label)}</b> <span class="muted small">${J.esc(a.email)}</span>${a.type === 'imap' && a.hasPassword === false ? ' <span class="pill warn">mot de passe manquant</span>' : ''}</span><span class="row"><button class="sm" data-act="testMail" data-id="${J.esc(a.id)}">Tester</button><button class="sm danger" data-act="rmMail" data-id="${J.esc(a.id)}">Retirer</button></span></div><div class="mail-test" id="t_${J.esc(a.id.replace(/[^\w-]/g, '_'))}" role="status" aria-live="polite"></div></div>`).join('') || '<div class="empty">Aucun compte pour l\'instant.<p class="muted small" style="margin:6px 0 0">Ajoute un compte IMAP (parlement, Gmail avec mot de passe d\'application…) ou connecte Google pour lire tes courriels.</p></div>'}</div>
     <div class="card"><h2>Boîte de réception</h2>${accs.length ? `<div class="row"><label class="mail-sr" for="mAcc">Compte</label><select id="mAcc" class="grow">${accs.length > 1 ? `<option value="*" ${s.sel === '*' ? 'selected' : ''}>Tous les comptes</option>` : ''}${accs.map((a) => `<option value="${J.esc(a.id)}" ${a.id === s.sel ? 'selected' : ''}>${J.esc(a.label)}</option>`).join('')}</select><label class="mail-sr" for="mN">Nombre de messages</label><select id="mN" style="width:96px">${[5, 10, 20, 50].map((n) => `<option ${n === s.n ? 'selected' : ''}>${n}</option>`).join('')}</select><button data-act="readMail">Actualiser</button><button class="pri" data-act="sumMail">Lire et résumer</button></div>
@@ -447,6 +448,7 @@
     });
 
     if (J.mountMailbox) J.mountMailbox(document.getElementById('smartBox'));
+    if (J.mountMailSettings) J.mountMailSettings(document.getElementById('mbSettings')); // expéditeurs urgents + réglages de la surveillance
     if (!accs.length) return;
     // Affichage immédiat des derniers messages connus (retour sur la page), sinon lecture automatique : c'est une lecture seule locale.
     const fresh = s.msgs.length && s.loadedFor === s.sel + '|' + s.n && Date.now() - s.loadedAt < 60000;

@@ -40,8 +40,12 @@ function greeting() {
   const intro = `Bonjour${nom ? ' ' + nom : ''}. Que puis-je faire pour vous aujourd'hui ?`;
   let offer;
   if (!ready) offer = "Avant de commencer, il me faut un moteur d'intelligence artificielle. Ouvrez les réglages et renseignez votre clé : cela prend une minute.";
-  else offer = `Je peux ${abilities[0].say}, ${abilities[1].say}, ${abilities[2].say}, ${abilities[3].say}, et bien d'autres choses : gérer votre courrier, votre agenda, vos documents et vos dossiers. Il suffit de me parler.`;
-  return { nom, intro, offer, abilities, ready, hints: { accounts, topics, google: s.google.accounts.length }, lines };
+  else offer = `Je peux ${abilities[0].say}, ${abilities[1].say}, ${abilities[2].say}, ${abilities[3].say}, et bien d'autres choses : gérer votre courrier, votre agenda, vos documents et vos dossiers. Activez le micro, puis dites « Hé Jarvis » suivi de votre demande.`;
+  // Alertes de suivi (courriels non traités qui demandent une action) : annoncées dès l'arrivée, sans appel au réseau ni à l'IA.
+  let followAlerts = { count: 0, urgent: 0 };
+  try { followAlerts = mailbox.alertCount(); } catch { /* sans alertes */ }
+  if (followAlerts.count > 0) offer = `Vous avez ${followAlerts.count} alerte${followAlerts.count > 1 ? 's' : ''} de suivi${followAlerts.urgent ? `, dont ${followAlerts.urgent} urgente${followAlerts.urgent > 1 ? 's' : ''}` : ''}. Dites « mes alertes » pour les voir. ` + offer;
+  return { nom, intro, offer, abilities, ready, alerts: followAlerts, hints: { accounts, topics, google: s.google.accounts.length }, lines };
 }
 
 // ---------- Compréhension de la demande ----------
@@ -215,6 +219,8 @@ function fastRoute(input) {
   if (/^(?:envoie\w*|envoyer|ecri\w+|redige\w*|prepare\w*|compose\w*|composer|genere\w*)(?:-moi|-lui|-nous)?\b/.test(t) && MW_RX.test(t)) return { intent: 'mail_compose' };
   // Boîte intelligente : tri, événements, invitations, « ajoute-le à mon agenda » (Jarvis n'ajoute rien lui-même : il ouvre le tri et l'utilisateur valide)
   if (/^(?:ajoute|ajouter|mets|mettre|inscris|inscrire|enregistre|rajoute)(?:-le|-la|-les|-moi)?\b.*\b(?:agenda|calendrier)\b/.test(t) && !/\d{1,2}\s?h|demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\bnouveau\b/.test(t)) return { intent: 'mails', args: { addEvent: true } };
+  // Alertes de suivi : « y a-t-il des alertes ? », « mes alertes de suivi », « qu'est-ce qui est urgent ? »
+  if (/\balertes?\b/.test(t) || /\bqu'est-ce qui (?:est |me )?(?:urgent|urge|presse|est prioritaire)\b/.test(t) || /\b(?:quoi|rien|quelque chose) d'urgent\b/.test(t) || /\bmes (?:urgences|suivis)\b/.test(t)) return { intent: 'alertes' };
   if (/\b(?:attend\w*\s+(?:ma|une|de)\s+(?:reaction|reponse)|(?:dois|doit|faut|faudrait)\s+(?:que je\s+)?(?:repondre|traiter|reagir)|a\s+(?:repondre|traiter)|sans reponse|en attente de (?:ma )?reponse)\b/.test(t) && !/\b(?:reponds?|repondez)\b/.test(t)) return { intent: 'mails' };
   if (/\b(?:invitations?|evenements?|reunions?|rendez-vous|rdv)\b/.test(t) && /\b(?:dans|de|par|sur)\s+(?:mes|ma|les|des)\s+(?:e-?mails?|mails?|courriels?|messages?|messagerie|boite)\b/.test(t)) return { intent: 'mails' };
   if (/\b(?:invitations?|evenements?)\b/.test(t) && /\b(?:ai-je|j'ai|as-tu|y a-t-il|il y a|a-t-on|recu\w*|nouvelles?)\b/.test(t) && !/\bagenda|calendrier\b/.test(t)) return { intent: 'mails' };
@@ -247,7 +253,7 @@ function fastRoute(input) {
 
 // ---------- Compréhension par le moteur IA (repli quand les règles ne suffisent pas) ----------
 const CATALOG = `Intentions possibles (choisis UNE) :
-- mails : résumer / trier les courriels récents ou non lus. - mails_read {index?, from?, all?} : LIRE À VOIX HAUTE un ou tous les courriels (index 1 = premier, -1 = dernier). - mail_reply {index?, from?, instruction?} : préparer une réponse à un courriel (jamais envoyée).
+- alertes : alertes de suivi (courriels non traités avec échéance, expéditeur urgent, sans réponse), « qu'est-ce qui est urgent ? ». - mails : résumer / trier les courriels récents ou non lus. - mails_read {index?, from?, all?} : LIRE À VOIX HAUTE un ou tous les courriels (index 1 = premier, -1 = dernier). - mail_reply {index?, from?, instruction?} : préparer une réponse à un courriel (jamais envoyée).
 - veille_topic {topic} : veille (actualité + agenda parlementaire) sur un sujet précis. - veille_run : lancer la veille sur tous les sujets déjà suivis.
 - recherche {query, parlement?} : recherche approfondie sur un projet, un sujet, des antécédents parlementaires.
 - redaction {subject, kind?} : rédiger une question / interpellation / résolution (kind = « question écrite », « question orale », « interpellation », « question d'actualité », « résolution »… si précisé).
@@ -258,8 +264,8 @@ const CATALOG = `Intentions possibles (choisis UNE) :
 - remember {text} : retenir une préférence ou un fait sur l'utilisateur.
 - repeat : répéter la dernière réponse. - read_last : lire à voix haute le texte affiché. - stop : se taire. - speech_rate {dir} : parler plus lentement (-1), plus vite (1), vitesse normale (0). - parlement_switch {name?} : changer de parlement actif. - new_conversation : repartir de zéro. - thanks : remerciement / fin de conversation. - help : ce que Jarvis sait faire.
 - chat {web?} : TOUTE autre demande, question ou conversation (web=true seulement si l'actualité récente est nécessaire).`;
-const ROUTABLE = new Set(['mails', 'mails_read', 'mail_reply', 'veille_topic', 'veille_run', 'recherche', 'redaction', 'briefing', 'agenda', 'dossiers', 'documents', 'navigate', 'mail_compose', 'remember', 'repeat', 'read_last', 'stop', 'speech_rate', 'parlement_switch', 'new_conversation', 'thanks', 'help', 'chat']);
-const INTENT_ALIAS = { mail: 'mails', email: 'mails', emails: 'mails', courriels: 'mails', check_mails: 'mails', resume_mails: 'mails', read_mails: 'mails_read', lire_mails: 'mails_read', reply: 'mail_reply', repondre: 'mail_reply', reponse_mail: 'mail_reply', veille: 'veille_topic', watch: 'veille_topic', search: 'recherche', research: 'recherche', rechercher: 'recherche', draft: 'redaction', write: 'redaction', rediger: 'redaction', calendar: 'agenda', calendrier: 'agenda', brief: 'briefing', docs: 'documents', document: 'documents', open: 'navigate', navigation: 'navigate', compose: 'mail_compose', memoire: 'remember', memorize: 'remember', conversation: 'chat', other: 'chat', unknown: 'chat', autre: 'chat', merci: 'thanks', aide: 'help', repeter: 'repeat' };
+const ROUTABLE = new Set(['alertes', 'mails', 'mails_read', 'mail_reply', 'veille_topic', 'veille_run', 'recherche', 'redaction', 'briefing', 'agenda', 'dossiers', 'documents', 'navigate', 'mail_compose', 'remember', 'repeat', 'read_last', 'stop', 'speech_rate', 'parlement_switch', 'new_conversation', 'thanks', 'help', 'chat']);
+const INTENT_ALIAS = { alerte: 'alertes', alerts: 'alertes', alert: 'alertes', suivi: 'alertes', urgent: 'alertes', urgences: 'alertes', follow_up: 'alertes', mail: 'mails', email: 'mails', emails: 'mails', courriels: 'mails', check_mails: 'mails', resume_mails: 'mails', read_mails: 'mails_read', lire_mails: 'mails_read', reply: 'mail_reply', repondre: 'mail_reply', reponse_mail: 'mail_reply', veille: 'veille_topic', watch: 'veille_topic', search: 'recherche', research: 'recherche', rechercher: 'recherche', draft: 'redaction', write: 'redaction', rediger: 'redaction', calendar: 'agenda', calendrier: 'agenda', brief: 'briefing', docs: 'documents', document: 'documents', open: 'navigate', navigation: 'navigate', compose: 'mail_compose', memoire: 'remember', memorize: 'remember', conversation: 'chat', other: 'chat', unknown: 'chat', autre: 'chat', merci: 'thanks', aide: 'help', repeter: 'repeat' };
 const asInt = (v, min, max, def) => { const n = Math.round(Number(v)); return Number.isFinite(n) && n >= min && n <= max ? n : def; };
 const asStr = (v, n = 400) => (typeof v === 'string' ? v.trim().slice(0, n) : (typeof v === 'number' ? String(v) : ''));
 // Valide la réponse du moteur : intention connue sinon « chat », arguments typés et bornés.
@@ -343,6 +349,19 @@ const ACTIONS = {
     const top = r.items[(r.groups.reaction[0] || r.groups.important[0] || r.groups.event[0] || order[0])];
     const say = `Vous avez ${r.total} nouveau${r.total > 1 ? 'x' : ''} mail${r.total > 1 ? 's' : ''}. ` + (parts.length ? parts.join(' ; ') + '. ' : "Rien d'urgent. ") + (top && (c.reaction || imp) ? `Le plus important : ${top.fromName}, à propos de ${top.subject}.` : '') + (r.consentNeeded ? " J'ai fait un tri simple : autorisez l'IA pour un tri plus fin." : '');
     return { say: ((addEvent ? (c.event ? "Je n'ajoute rien moi-même à votre agenda : voici les courriels qui contiennent un événement, vous validez l'ajout. " : "Je ne trouve aucun événement dans vos nouveaux courriels, et je n'ajoute jamais rien sans votre accord. ") : '') + say).replace(/\s+/g, ' ').trim(), triage: r, link: { label: 'Ouvrir la boîte intelligente', page: 'courriels' }, suggest: ['Lis-moi les mails', 'Réponds au premier mail'] };
+  },
+
+  // Alertes de suivi : résumé court à voix haute, cartes à l'écran (même présentation que la page Courriels). Aucune donnée n'est envoyée.
+  async alertes() {
+    const v = mailbox.alertsView(); const a = v.alerts;
+    if (!a.count) return { say: 'Aucune alerte de suivi : tout est à jour.', link: { label: 'Ouvrir la boîte intelligente', page: 'courriels' } };
+    const by = (lv) => a.items.filter((x) => x.level === lv).length; const parts = [];
+    if (by('overdue')) parts.push(`${by('overdue')} en retard`); if (by('today')) parts.push(`${by('today')} pour aujourd'hui`); if (by('soon')) parts.push(`${by('soon')} à venir`);
+    if (by('vip')) parts.push(`${by('vip')} d'un expéditeur urgent`); if (by('important')) parts.push(`${by('important')} très important${by('important') > 1 ? 's' : ''}`); if (by('silent')) parts.push(`${by('silent')} sans réponse depuis plus de deux jours`);
+    const top = a.items[0];
+    const say = `Vous avez ${a.count} alerte${a.count > 1 ? 's' : ''} de suivi : ${parts.join(', ')}. Le plus pressant : ${top.fromName}, à propos de ${top.subject}. ${top.reason}.`;
+    lastMails = a.items.map((x) => x.message).filter(Boolean);
+    return { say: say.replace(/\s+/g, ' ').trim(), triage: v, link: { label: 'Ouvrir la boîte intelligente', page: 'courriels' }, suggest: ['Check mes mails'] };
   },
 
   // Récupère les courriels (lecture seule) ; la lecture à voix haute reste locale : aucun envoi au moteur IA.
