@@ -8,7 +8,7 @@
   "license": "MIT",
   "scripts": {
     "start": "electron .",
-    "test": "node scripts/smoke-test.js && node scripts/test-agenda.js && node scripts/test-mailbox.js",
+    "test": "node scripts/smoke-test.js && node scripts/test-agenda.js && node scripts/test-mailbox.js && node scripts/test-mail.js && node scripts/test-jarvis.js",
     "icon": "node scripts/make-icon.js",
     "dist": "bash scripts/build-native.sh && electron-builder --mac --publish never",
     "build:native": "bash scripts/build-native.sh"

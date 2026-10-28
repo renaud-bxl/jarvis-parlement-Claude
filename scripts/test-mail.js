@@ -145,12 +145,13 @@ const timed = (fn) => { const t = Date.now(); const r = fn(); return [r, Date.no
   // ================= Lecture IMAP simulée (vrai mailparser) =================
   const imapflow = require('imapflow'); const RealImap = imapflow.ImapFlow;
   const mime = (o) => Buffer.from([`From: ${o.from ?? 'Marie Dupont <marie@exemple.be>'}`, `To: ${o.to ?? 'moi@exemple.be'}`, o.cc ? `Cc: ${o.cc}` : null, `Subject: ${o.subject ?? 'Sujet'}`, `Date: ${o.date ?? 'Tue, 27 Oct 2026 10:00:00 +0100'}`, `Message-ID: <${o.mid ?? Math.random().toString(36).slice(2)}@x>`, o.extra, 'MIME-Version: 1.0', o.ct ?? 'Content-Type: text/plain; charset=utf-8', o.cte ?? 'Content-Transfer-Encoding: 8bit', '', o.body ?? 'Bonjour'].filter((x) => x != null).join('\r\n'));
+  const arr = (h) => (Array.isArray(Fake.boxes[h]) ? Fake.boxes[h] : [{ source: mime({}) }]);
   class Fake {
     constructor(opts) { Fake.made.push(this); this.opts = opts; }
     on() {} close() { this.closed = true; if (this._rej) this._rej(Object.assign(new Error('Connection closed'), { code: 'ECONNRESET' })); }
     async connect() { Fake.connects++; const b = Fake.boxes[this.opts.host]; if (b === 'hang') return new Promise((_r, rej) => { this._rej = rej; }); if (b instanceof Error) throw b; if (b === 'slow') await new Promise((r) => setTimeout(r, 120)); }
-    async getMailboxLock(p, o) { Fake.locks.push([p, o]); const b = Fake.boxes[this.opts.host] || []; this.mailbox = { exists: b.length }; return { release() {} }; }
-    async *fetch(range, q) { Fake.queries.push([range, q]); const b = Fake.boxes[this.opts.host]; const from = Number(range.split(':')[0]); for (let i = from; i <= b.length; i++) yield { uid: 100 + i, flags: new Set(b[i - 1].seen ? ['\\Seen'] : []), internalDate: new Date(b[i - 1].internal || '2026-10-27T09:00:00Z'), size: b[i - 1].source.length, source: b[i - 1].source.slice(0, q.source.maxLength) }; }
+    async getMailboxLock(p, o) { Fake.locks.push([p, o]); const b = arr(this.opts.host); this.mailbox = { exists: b.length }; return { release() {} }; }
+    async *fetch(range, q) { Fake.queries.push([range, q]); const b = arr(this.opts.host); const from = Number(range.split(':')[0]); for (let i = from; i <= b.length; i++) yield { uid: 100 + i, flags: new Set(b[i - 1].seen ? ['\\Seen'] : []), internalDate: new Date(b[i - 1].internal || '2026-10-27T09:00:00Z'), size: b[i - 1].source.length, source: b[i - 1].source.slice(0, q.source.maxLength) }; }
     async search() { return [1, 2]; }
     async logout() { Fake.logouts++; }
   }
@@ -219,12 +220,12 @@ const timed = (fn) => { const t = Date.now(); const r = fn(); return [r, Date.no
     const J = { act: {}, state: {}, esc: (s) => String(s) }; const noop = () => {};
     const ctx = vm.createContext({ J, window: { addEventListener: noop }, document: { getElementById: () => null, createElement: () => ({}), head: { appendChild: noop }, addEventListener: noop, querySelector: () => null }, localStorage: { getItem: () => null, setItem: noop, removeItem: noop }, TextDecoder, TextEncoder, atob, Uint8Array, Date, Math, console, setTimeout, clearTimeout, setInterval, clearInterval, matchMedia: () => ({ matches: false }) });
     vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'mail-ui.js'), 'utf8'), ctx);
-    for (const s of ['Bonjour Camille.\n> cité\nLien https://x.be/abc ou jean@exemple.be fin.\n\n-- \nJean\n+32', 'Merci.\nLe lundi 5 mars 2026 à 10:00, Jean a écrit :\nvieux', 'Phrase une. '.repeat(200), '']) assert.deepStrictEqual(J.speakable(s), mt.speakable(s));
+    for (const s of ['Bonjour Camille.\n> cité\nLien https://x.be/abc ou jean@exemple.be fin.\n\n-- \nJean\n+32', 'Merci.\nLe lundi 5 mars 2026 à 10:00, Jean a écrit :\nvieux', 'Phrase une. '.repeat(200), '']) assert.strictEqual(JSON.stringify(J.speakable(s)), JSON.stringify(mt.speakable(s)));
     ok('lecture vocale : le code de l\'interface et celui du serveur donnent le même texte');
     const raw = mail.buildEml({ from: 'moi@exemple.be', to: '"Dupont, Marie" <marie@x.be>', cc: 'Élodie <e@x.be>', bcc: 'c@x.be', subject: 'Question été', body: 'Bonjour é\nLigne 2', inReplyTo: '<1@x>', references: '<0@x> <1@x>' });
     const p = J.parseEml(raw); assert.strictEqual(p.subject, 'Question été'); assert.strictEqual(p.body, 'Bonjour é\nLigne 2'); assert(p.to.includes('Dupont, Marie') && p.cc.includes('Élodie') && p.bcc === 'c@x.be'); assert.strictEqual(p.inReplyTo, '<1@x>'); assert.strictEqual(p.references, '<0@x> <1@x>'); ok('ouverture d\'un .eml : champs décodés (plus de texte encodé affiché), chaînage conservé');
-    const d = J.mailDedupe([{ messageId: '<1@x>', unread: false, id: 'a' }, { messageId: '<1@X>', unread: true, id: 'b' }, { messageId: '', id: 'c' }, { messageId: '', id: 'd' }]); assert.deepStrictEqual(d.map((x) => x.id), ['b', 'c', 'd']); ok('déduplication entre comptes (Message-ID), la copie non lue est gardée');
-    const srt = J.mailSort([{ id: 1, date: '2026-10-01T00:00:00Z' }, { id: 2, date: 'x', received: '2026-10-05T00:00:00Z' }, { id: 3, date: '2030-01-01T00:00:00Z', received: '2026-10-03T00:00:00Z' }]).map((m) => m.id); assert.deepStrictEqual(srt, [2, 3, 1]); ok('tri de l\'interface identique à celui du serveur');
+    const d = J.mailDedupe([{ messageId: '<1@x>', unread: false, id: 'a' }, { messageId: '<1@X>', unread: true, id: 'b' }, { messageId: '', id: 'c' }, { messageId: '', id: 'd' }]); assert.strictEqual(d.map((x) => x.id).join(), 'b,c,d'); ok('déduplication entre comptes (Message-ID), la copie non lue est gardée');
+    const srt = J.mailSort([{ id: 1, date: '2026-10-01T00:00:00Z' }, { id: 2, date: 'x', received: '2026-10-05T00:00:00Z' }, { id: 3, date: '2030-01-01T00:00:00Z', received: '2026-10-03T00:00:00Z' }]).map((m) => m.id); assert.strictEqual(srt.join(), '2,3,1'); ok('tri de l\'interface identique à celui du serveur');
     const rd = J.mailSpeech({ from: 'Marie <m@x.be>', subject: 'Budget', text: 'Bonjour.', attachments: ['a.pdf', 'b.pdf'] }); assert(rd.includes('De Marie.') && rd.includes('2 pièces jointes.')); ok('annonce vocale : expéditeur, objet, pièces jointes');
   }
 

@@ -54,7 +54,7 @@ async function run(version = '1.0.0', opts = {}) {
 
   await guard('Moteur IA', async () => {
     if (!llm.configured()) { add('Moteur IA', 'ko', 'Non configuré : ajoute ta clé ou choisis un modèle dans Réglages › Moteur IA.'); return; }
-    try { const p = await withTimeout(llm.ping(), 40000, 'délai dépassé (40 s)'); add('Moteur IA', 'ok', `${p.model} répond en ${p.ms} ms · ${llm.isLocal() ? 'local (rien ne quitte cet ordinateur)' : 'cloud (l\'envoi de documents et courriels demande ton accord à chaque fois)'}`); }
+    try { const p = await withTimeout(llm.ping(), 10000, 'délai dépassé (10 s)'); add('Moteur IA', 'ok', `${p.model} répond en ${p.ms} ms · ${llm.isLocal() ? 'local (rien ne quitte cet ordinateur)' : 'cloud (l\'envoi de documents et courriels demande ton accord à chaque fois)'}`); }
     catch (e) { add('Moteur IA', 'ko', 'Moteur injoignable ou refusé : ' + e.message); }
   });
   add('Recherche web', st.ai.webSearch ? (st.ai.provider === 'anthropic' ? 'ok' : 'warn') : 'warn', st.ai.webSearch ? (st.ai.provider === 'anthropic' ? 'Outil de recherche web de Claude' : 'Recherche de secours (DuckDuckGo) — moins fiable') : 'Désactivée');
@@ -102,14 +102,14 @@ async function run(version = '1.0.0', opts = {}) {
     const accs = mail.listAccounts();
     if (!accs.length) add('Courriels', 'warn', 'Aucun compte connecté (Courriels › Ajouter un compte).');
     for (const a of accs) {
-      try { const r = await withTimeout(mail.testAccount(a.id), 20000, 'délai dépassé (20 s)'); add('Courriel · ' + a.email, 'ok', r.detail); }
+      try { const r = await withTimeout(mail.testAccount(a.id), 12000, 'délai dépassé (12 s)'); add('Courriel · ' + a.email, 'ok', r.detail); }
       catch (e) { add('Courriel · ' + a.email, 'ko', e.message + ' — vérifie le mot de passe (souvent un « mot de passe d\'application ») et les serveurs.'); }
     }
   });
   await guard('Google Agenda', async () => {
     if (!st.google.clientId) add('Google Agenda', 'warn', 'Identifiant client Google non renseigné (optionnel : Agenda › Connexion).');
     else if (!st.google.accounts.length) add('Google Agenda', 'warn', 'Client renseigné, aucun compte connecté.');
-    else { const e = await withTimeout(google.events(1), 20000, 'délai dépassé (20 s)'); add('Google Agenda', e.errors.length ? 'ko' : 'ok', e.errors.join(' ; ') || `${st.google.accounts.length} compte(s), ${e.events.length} événement(s) aujourd'hui`); }
+    else { const e = await withTimeout(google.events(1), 12000, 'délai dépassé (12 s)'); add('Google Agenda', e.errors.length ? 'ko' : 'ok', e.errors.join(' ; ') || `${st.google.accounts.length} compte(s), ${e.events.length} événement(s) aujourd'hui`); }
   });
 
   await guard('Veille automatique', async () => {

@@ -76,7 +76,7 @@ function createWindow() {
     width: 1360, height: 880, minWidth: 1020, minHeight: 640,
     title: 'Jarvis Parlement',
     titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 18, y: 18 },
-    backgroundColor: '#f6f4ef',
+    backgroundColor: require('electron').nativeTheme.shouldUseDarkColors ? '#071530' : '#f3f5fa', // évite un flash clair au démarrage en thème sombre
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true,
       webSecurity: true, allowRunningInsecureContent: false, webviewTag: false, nodeIntegrationInSubFrames: false,

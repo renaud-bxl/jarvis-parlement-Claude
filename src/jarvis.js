@@ -213,6 +213,12 @@ function fastRoute(input) {
   }
   // Rédiger / envoyer un courriel (Jarvis ne l'envoie jamais)
   if (/^(?:envoie\w*|envoyer|ecri\w+|redige\w*|prepare\w*|compose\w*|composer|genere\w*)(?:-moi|-lui|-nous)?\b/.test(t) && MW_RX.test(t)) return { intent: 'mail_compose' };
+  // Boîte intelligente : tri, événements, invitations, « ajoute-le à mon agenda » (Jarvis n'ajoute rien lui-même : il ouvre le tri et l'utilisateur valide)
+  if (/^(?:ajoute|ajouter|mets|mettre|inscris|inscrire|enregistre|rajoute)(?:-le|-la|-les|-moi)?\b.*\b(?:agenda|calendrier)\b/.test(t) && !/\d{1,2}\s?h|demain|lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche|\bnouveau\b/.test(t)) return { intent: 'mails', args: { addEvent: true } };
+  if (/\b(?:attend\w*\s+(?:ma|une|de)\s+(?:reaction|reponse)|(?:dois|doit|faut|faudrait)\s+(?:que je\s+)?(?:repondre|traiter|reagir)|a\s+(?:repondre|traiter)|sans reponse|en attente de (?:ma )?reponse)\b/.test(t) && !/\b(?:reponds?|repondez)\b/.test(t)) return { intent: 'mails' };
+  if (/\b(?:invitations?|evenements?|reunions?|rendez-vous|rdv)\b/.test(t) && /\b(?:dans|de|par|sur)\s+(?:mes|ma|les|des)\s+(?:e-?mails?|mails?|courriels?|messages?|messagerie|boite)\b/.test(t)) return { intent: 'mails' };
+  if (/\b(?:invitations?|evenements?)\b/.test(t) && /\b(?:ai-je|j'ai|as-tu|y a-t-il|il y a|a-t-on|recu\w*|nouvelles?)\b/.test(t) && !/\bagenda|calendrier\b/.test(t)) return { intent: 'mails' };
+  if (/\b(?:trie\w*|classe\w*|priorise\w*|hierarchise\w*)\b/.test(t) && MW_RX.test(t)) return { intent: 'mails' };
   // Résumer / contrôler les courriels
   if (MW_RX.test(t) && /\b(?:check\w*|cheque\w*|chek\w*|tcheck\w*|verifi\w*|regard\w*|consult\w*|resum\w*|passe\w* en revue|jette\w* un (?:oe|œ)il|nouveau\w*|nouvelle\w*|non lus?|recu\w*|ai-je|j'ai|y a-t-il|y a t il|il y a|quoi de neuf|du neuf|urgent\w*|important\w*|prioritaire\w*|trie\w*)\b/.test(t)) return { intent: 'mails' };
   if (/^(?:mes|mon|ma|les|des|tous mes)\s+(?:nouveaux\s+)?(?:e-?mails?|mails?|courriels?|messageries?|courriers?|meles?)\W*$/.test(t)) return { intent: 'mails' };
@@ -321,7 +327,7 @@ function pickInstrument(kind) {
 
 const ACTIONS = {
   // Boîte intelligente : lit les non lus de tous les comptes, les classe (réaction, événements, importants…) et résume à voix haute.
-  async mails({ rulesOnly } = {}, ctx) {
+  async mails({ rulesOnly, addEvent } = {}, ctx) {
     const accs = mail.listAccounts();
     if (!accs.length) return { say: "Aucun compte courriel n'est encore relié. Je vous ouvre la page Courriels pour en ajouter un.", navigate: 'courriels' };
     const cloudOk = llm.isLocal() || ctx.confirmed || store.settings.get().jarvis.cloudMailOk;
@@ -336,7 +342,7 @@ const ACTIONS = {
     const parts = []; if (c.reaction) parts.push(`${c.reaction} attend${c.reaction > 1 ? 'ent' : ''} votre réaction`); if (c.event) parts.push(`${c.event} contien${c.event > 1 ? 'nent' : 't'} un événement à ajouter à l'agenda`); const imp = r.groups.important.filter((k) => !r.groups.reaction.includes(k)).length; if (imp) parts.push(`${imp} ${imp > 1 ? 'sont importants' : 'est important'}`);
     const top = r.items[(r.groups.reaction[0] || r.groups.important[0] || r.groups.event[0] || order[0])];
     const say = `Vous avez ${r.total} nouveau${r.total > 1 ? 'x' : ''} mail${r.total > 1 ? 's' : ''}. ` + (parts.length ? parts.join(' ; ') + '. ' : "Rien d'urgent. ") + (top && (c.reaction || imp) ? `Le plus important : ${top.fromName}, à propos de ${top.subject}.` : '') + (r.consentNeeded ? " J'ai fait un tri simple : autorisez l'IA pour un tri plus fin." : '');
-    return { say: say.replace(/\s+/g, ' ').trim(), triage: r, link: { label: 'Ouvrir la boîte intelligente', page: 'courriels' }, suggest: ['Lis-moi les mails', 'Réponds au premier mail'] };
+    return { say: ((addEvent ? (c.event ? "Je n'ajoute rien moi-même à votre agenda : voici les courriels qui contiennent un événement, vous validez l'ajout. " : "Je ne trouve aucun événement dans vos nouveaux courriels, et je n'ajoute jamais rien sans votre accord. ") : '') + say).replace(/\s+/g, ' ').trim(), triage: r, link: { label: 'Ouvrir la boîte intelligente', page: 'courriels' }, suggest: ['Lis-moi les mails', 'Réponds au premier mail'] };
   },
 
   // Récupère les courriels (lecture seule) ; la lecture à voix haute reste locale : aucun envoi au moteur IA.

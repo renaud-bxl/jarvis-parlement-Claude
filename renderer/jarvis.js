@@ -1,10 +1,11 @@
 // Écran d'accueil « Jarvis » : orbe animé, salutation parlée, conversation vocale (écouter → comprendre → agir → répondre à voix haute).
 (() => {
-  const H = J.jv = { token: 0, loop: false, listening: null, state: 'idle', level: 0, pending: null, empties: 0 };
+  const H = J.jv = { token: 0, turnId: 0, loop: false, listening: null, state: 'idle', level: 0, pending: null, empties: 0, raf: 0, busy: false, last: null, mails: [] };
   const store = { get: (k, d) => { try { const v = localStorage.getItem('jv.' + k); return v === null ? d : JSON.parse(v); } catch { return d; } }, set: (k, v) => { try { localStorage.setItem('jv.' + k, JSON.stringify(v)); } catch { /* ok */ } } };
   const $ = (id) => document.getElementById(id);
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const onPage = () => !!$('jv');
+  const reduceMotion = () => { try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
   J.state.jh = J.state.jh || [];
 
   // ---------- Orbe « cockpit » : anneaux qui tournent, barres vocales, « J » central ----------
@@ -14,35 +15,31 @@
   const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
   const rgb = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
   const GOLD = [255, 210, 31];
+  const stopOrb = () => { if (H.raf) cancelAnimationFrame(H.raf); H.raf = 0; H.orbResume = null; };
   function startOrb(canvas) {
-    const g = canvas.getContext('2d'); const W = canvas.width, C = W / 2; let t = 0, lv = 0, spin = 0;
+    stopOrb();
+    const g = canvas.getContext('2d'); const W = canvas.width, C = W / 2; let t = 0, lv = 0, spin = 0, prev = 0;
     const N = 132;
-    const draw = () => {
-      if (!canvas.isConnected) return;
-      t += 0.016; const target = COL[H.state] || COL.idle;
+    const draw = (dt) => {
+      const sp = reduceMotion() ? 0.15 : 1; t += dt * sp; const target = COL[H.state] || COL.idle;
       cur = [mix(cur[0], hex(target[0]), 0.06), mix(cur[1], hex(target[1]), 0.06)];
       let want = 0.07 + 0.05 * Math.sin(t * 1.3);
       if (H.state === 'listening') want = Math.min(1, 0.12 + H.level * 10);
       else if (H.state === 'speaking') want = 0.45 + 0.4 * Math.abs(Math.sin(t * 5.1) * Math.sin(t * 2.3 + 1));
       else if (H.state === 'thinking') want = 0.16;
-      lv += (want - lv) * 0.2; spin += (H.state === 'thinking' ? 0.045 : 0.006);
+      lv += (want - lv) * 0.2; spin += (H.state === 'thinking' ? 2.7 : 0.36) * dt * sp;
       g.clearRect(0, 0, W, W);
-      // halo
       const halo = g.createRadialGradient(C, C, W * 0.12, C, C, W * 0.5);
       halo.addColorStop(0, rgb(cur[0], 0.32 + lv * 0.28)); halo.addColorStop(0.55, rgb(cur[0], 0.08)); halo.addColorStop(1, rgb(cur[0], 0));
       g.fillStyle = halo; g.fillRect(0, 0, W, W);
-      // anneau de graduations
       g.save(); g.translate(C, C); g.rotate(spin * 0.4);
       for (let i = 0; i < 180; i++) { const a = (i / 180) * Math.PI * 2, big = i % 5 === 0; g.beginPath(); g.moveTo(Math.cos(a) * W * 0.465, Math.sin(a) * W * 0.465); g.lineTo(Math.cos(a) * W * (big ? 0.445 : 0.455), Math.sin(a) * W * (big ? 0.445 : 0.455)); g.strokeStyle = rgb(big ? cur[1] : cur[0], big ? 0.55 : 0.3); g.lineWidth = big ? 2.4 : 1.4; g.stroke(); }
       g.restore();
-      // arcs dorés
       g.save(); g.translate(C, C); g.rotate(-spin * 1.6 - t * 0.12); g.lineCap = 'round';
       [[0.1, 1.1], [1.9, 2.5], [3.6, 5.0]].forEach(([a0, a1], k) => { g.beginPath(); g.arc(0, 0, W * (0.425 - k * 0.012), a0 + k, a1 + k * 0.6); g.strokeStyle = rgb(GOLD, 0.95 - k * 0.2); g.lineWidth = 5 - k; g.shadowColor = rgb(GOLD, 0.8); g.shadowBlur = 14; g.stroke(); });
       g.restore(); g.shadowBlur = 0;
-      // anneau bleu fin + segment lumineux
       g.beginPath(); g.arc(C, C, W * 0.385, 0, Math.PI * 2); g.strokeStyle = rgb(cur[0], 0.45); g.lineWidth = 2; g.stroke();
       g.save(); g.translate(C, C); g.rotate(spin * 2.2 + t * 0.35); g.beginPath(); g.arc(0, 0, W * 0.385, 0, Math.PI * 0.45); g.strokeStyle = rgb(cur[1], 0.95); g.lineWidth = 4; g.lineCap = 'round'; g.shadowColor = rgb(cur[0], 1); g.shadowBlur = 16; g.stroke(); g.restore(); g.shadowBlur = 0;
-      // barres vocales
       const r0 = W * 0.285;
       for (let i = 0; i < N; i++) {
         const a = (i / N) * Math.PI * 2 - Math.PI / 2;
@@ -51,21 +48,40 @@
         g.beginPath(); g.moveTo(C + Math.cos(a) * r0, C + Math.sin(a) * r0); g.lineTo(C + Math.cos(a) * (r0 + len), C + Math.sin(a) * (r0 + len));
         g.strokeStyle = rgb(mix(cur[0], cur[1], (Math.sin(a * 2 + t) + 1) / 2), 0.9); g.lineWidth = W * 0.0065; g.lineCap = 'round'; g.stroke();
       }
-      // disque central
       const R = W * 0.255 * (1 + lv * 0.03);
       const core = g.createRadialGradient(C, C - R * 0.3, R * 0.1, C, C, R);
       core.addColorStop(0, '#0f3a82'); core.addColorStop(0.65, '#0a2559'); core.addColorStop(1, '#061a3f');
       g.beginPath(); g.arc(C, C, R, 0, Math.PI * 2); g.fillStyle = core; g.shadowColor = rgb(cur[0], 0.9); g.shadowBlur = 28 + lv * 40; g.fill(); g.shadowBlur = 0;
       g.lineWidth = 3; g.strokeStyle = rgb(cur[1], 0.85); g.stroke();
       g.beginPath(); g.arc(C, C, R * 0.88, 0, Math.PI * 2); g.strokeStyle = rgb(cur[0], 0.35); g.lineWidth = 1.5; g.stroke();
-      // « J »
       g.font = `700 ${Math.round(R * 1.15)}px "Helvetica Neue", Helvetica, Arial, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
       g.shadowColor = rgb(GOLD, 0.85); g.shadowBlur = 18 + lv * 36; g.fillStyle = H.state === 'thinking' ? `rgba(255,210,31,${0.65 + 0.35 * Math.sin(t * 6)})` : '#ffd21f'; g.fillText('J', C, C + R * 0.06); g.shadowBlur = 0;
-      requestAnimationFrame(draw);
     };
-    draw();
+    const frame = (ts) => {
+      H.raf = 0; if (!canvas.isConnected || document.hidden) return; // page quittée ou fenêtre masquée : plus aucun calcul
+      const dt = prev ? Math.min(0.05, (ts - prev) / 1000) : 0.016; prev = ts; draw(dt); H.raf = requestAnimationFrame(frame);
+    };
+    H.orbResume = () => { if (!H.raf && canvas.isConnected && !document.hidden) { prev = 0; H.raf = requestAnimationFrame(frame); } };
+    H.orbResume();
   }
-  const setState = (s, status) => { H.state = s; const el = $('jvStatus'); if (el && status !== undefined) el.textContent = status; const o = $('orbBtn'); if (o) o.dataset.state = s; };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && H.orbResume) H.orbResume(); });
+
+  // ---------- États (repos / écoute / réflexion / parole) ----------
+  const STATUS = { idle: '', listening: 'Je vous écoute…  (touchez pour terminer)', thinking: 'Je réfléchis…', speaking: 'Je parle…  (touchez pour m’interrompre)' };
+  const ORB_LABEL = { idle: 'Parler à Jarvis', listening: 'Terminer l’écoute', thinking: 'Jarvis réfléchit', speaking: 'Interrompre Jarvis' };
+  const MIC_LABEL = { idle: '🎤 Parler à Jarvis', listening: '⏹ Terminer', thinking: '… Je réfléchis', speaking: '⏹ Interrompre' };
+  const setState = (s, status) => {
+    H.state = s; const root = $('jv'); if (root) root.dataset.state = s;
+    const el = $('jvStatus'); if (el) el.textContent = status !== undefined ? status : STATUS[s] || '';
+    const o = $('orbBtn'); if (o) { o.dataset.state = s; o.setAttribute('aria-label', ORB_LABEL[s] || ORB_LABEL.idle); o.setAttribute('aria-pressed', String(s === 'listening')); }
+    const m = $('jvMic'); if (m) { m.textContent = MIC_LABEL[s] || MIC_LABEL.idle; m.setAttribute('aria-pressed', String(s === 'listening')); m.disabled = s === 'thinking'; }
+  };
+  // Message d'erreur / d'aide, annoncé aux lecteurs d'écran, avec un bouton d'action facultatif.
+  const notice = (msg, act, label) => {
+    const n = $('jvNotice'); if (!n) return;
+    if (!msg) { n.innerHTML = ''; n.hidden = true; return; }
+    n.hidden = false; n.innerHTML = `<span>${J.esc(msg)}</span>` + (act ? `<button class="sm" data-act="${act}">${J.esc(label)}</button>` : '');
+  };
 
   // ---------- Parole ----------
   const say = async (text) => {
@@ -74,7 +90,6 @@
   };
 
   // ---------- Affichage ----------
-  const typeIn = (el, text) => { el.textContent = text; el.classList.add('in'); };
   const CHIP = { mails: ['✉', 'Check mes mails'], veille: ['◎', 'Faire une veille'], redaction: ['✎', 'Rédiger une question'], briefing: ['☀', 'Briefing du jour'], agenda: ['▦', 'Mon agenda'], recherche: ['⌕', 'Recherche'], documents: ['▤', 'Mes documents'], dossiers: ['▣', 'Mes dossiers'] };
   function renderAbilities(g, animate) {
     const ul = $('jvCan'), ch = $('jvChips'); if (!ul || !ch) return;
@@ -83,6 +98,14 @@
     ch.innerHTML = g.abilities.map((a) => `<button class="${animate ? '' : 'in'}" data-act="jvAbility" data-id="${a.id}"><i>${(CHIP[a.id] || ['•'])[0]}</i>${J.esc((CHIP[a.id] || [0, a.label])[1])}</button>`).join('');
     if (animate) { [...ul.children].forEach((li, i) => setTimeout(() => li.classList.add('in'), i * 900)); [...ch.children].forEach((b, i) => setTimeout(() => b.classList.add('in'), 2000 + i * 140)); }
   }
+  const scrollDown = () => { const s = $('jvStage'); if (s) requestAnimationFrame(() => { s.scrollTop = s.scrollHeight; }); };
+  // Historique de la conversation (bulles) : l'utilisateur à droite, Jarvis à gauche.
+  function addMsg(role, text, extra) {
+    const log = $('jvLog'); if (!log) return null;
+    const d = document.createElement('div'); d.className = 'jv-msg ' + role + (extra ? ' ' + extra : '');
+    if (extra === 'wait') d.innerHTML = '<i></i><i></i><i></i>'; else d.textContent = text;
+    log.appendChild(d); while (log.children.length > 40) log.firstChild.remove(); scrollDown(); return d;
+  }
   function showOut(res) {
     const out = $('jvOut'); if (!out) return;
     const parts = [];
@@ -90,7 +113,7 @@
     if (res.triage && J.mbSectionsHtml) parts.push(`<div class="jv-card jv-tri">${J.mbSectionsHtml(res.triage)}</div>`);
     else if (res.messages && res.messages.length && !res.replyTo) {
       H.mails = res.messages;
-      parts.push(`<div class="jv-card"><div class="row sp"><b>${res.messages.length} message${res.messages.length > 1 ? 's' : ''}</b><span class="row"><button class="sm" data-act="jvMailAll">🔊 Lire tous</button><button class="sm ghost" data-act="jvMailStop">⏹</button></span></div>` + res.messages.map((m, i) => `<div class="jv-mail" id="jm${i}"><div class="grow"><b>${J.esc(m.subject)}</b>${m.unread ? ' <span class="pill gold">non lu</span>' : ''}<div class="muted small">${J.esc(J.nameOf(m.from))} · ${J.esc(m.date ? J.fmtDate(m.date) : '')}</div><div class="small">${J.esc((m.text || '').replace(/\s+/g, ' ').slice(0, 140))}…</div></div><span class="row"><button class="sm" data-act="jvMailRead" data-i="${i}">🔊 Lire</button><button class="sm" data-act="jvMailShow" data-i="${i}">👁 Afficher</button><button class="sm pri" data-act="jvMailReply" data-i="${i}">↩ Répondre</button></span></div>`).join('') + '</div>');
+      parts.push(`<div class="jv-card"><div class="row sp"><b>${res.messages.length} message${res.messages.length > 1 ? 's' : ''}</b><span class="row"><button class="sm" data-act="jvMailAll">🔊 Lire tous</button><button class="sm ghost" data-act="jvMailStop" aria-label="Arrêter la lecture">⏹</button></span></div>` + res.messages.map((m, i) => `<div class="jv-mail" id="jm${i}"><div class="grow"><b>${J.esc(m.subject)}</b>${m.unread ? ' <span class="pill gold">non lu</span>' : ''}<div class="muted small">${J.esc(J.nameOf(m.from))} · ${J.esc(m.date ? J.fmtDate(m.date) : '')}</div><div class="small">${J.esc((m.text || '').replace(/\s+/g, ' ').slice(0, 140))}…</div></div><span class="row"><button class="sm" data-act="jvMailRead" data-i="${i}">🔊 Lire</button><button class="sm" data-act="jvMailShow" data-i="${i}">👁 Afficher</button><button class="sm pri" data-act="jvMailReply" data-i="${i}">↩ Répondre</button></span></div>`).join('') + '</div>');
     }
     const btns = [];
     if (res.link) btns.push(`<button class="pri sm" data-act="jvGo" data-page="${res.link.page}">${J.esc(res.link.label)} →</button>`);
@@ -98,30 +121,39 @@
     (res.suggest || []).forEach((s) => btns.push(`<button class="sm chip" data-act="jvSay" data-t="${J.esc(s)}">${J.esc(s)}</button>`));
     if (btns.length) parts.push(`<div class="jv-actions">${btns.join('')}</div>`);
     out.innerHTML = parts.join('');
-    H.last = res;
+    H.last = res; scrollDown();
   }
   const titleFor = (i) => ({ mails: 'Vos courriels', veille_topic: 'Veille', veille_run: 'Veille', recherche: 'Recherche', redaction: 'Brouillon', briefing: 'Briefing du jour', agenda: 'Agenda', dossiers: 'Dossiers', documents: 'Dans vos documents', remember: 'Mémoire', help: 'Ce que je sais faire' }[i] || 'Réponse');
   const compact = () => { const r = $('jv'); if (r) r.classList.add('compact'); };
+  const resetConversation = () => { J.state.jh = []; H.last = null; H.pending = null; H.mails = []; const l = $('jvLog'); if (l) l.innerHTML = ''; const o = $('jvOut'); if (o) o.innerHTML = ''; };
 
   // ---------- Un tour de conversation ----------
-  async function turn(text) {
-    compact(); $('jvHeard').textContent = '« ' + text + ' »'; $('jvOut').innerHTML = '';
-    setState('thinking', 'Je m’en occupe…');
-    let confirmed, pending = null;
-    if (H.pending) {
-      const t = text.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
-      if (/^(oui|ouais|d'accord|ok|okay|vas-y|bien sur|volontiers|exact|affirmatif)/.test(t)) { pending = H.pending; confirmed = /toujours/.test(t) ? 'always' : true; }
-      else if (/^(non|pas |surtout pas|annule|refuse)/.test(t)) { pending = H.pending; confirmed = false; }
-      H.pending = null;
-    }
+  async function turn(text, opts = {}) {
+    const heard = opts.voice ? (J.cleanHeard(text) || text) : String(text).trim();
+    if (!heard) return null;
+    const id = ++H.turnId; H.busy = true; notice('');
+    compact(); $('jvOut').innerHTML = ''; addMsg('me', heard); const wait$ = addMsg('bot', '', 'wait');
+    setState('thinking');
     let res;
-    try { res = await J.call('jarvis.command', { text, history: J.state.jh.slice(-8), pending, confirmed }); }
-    catch (e) { res = { ok: false, say: 'Je n’ai pas pu terminer : ' + e.message }; }
-    if (!onPage()) return res;
-    J.state.jh.push({ role: 'user', content: text }, { role: 'assistant', content: res.say || '' });
-    if (res.confirm) H.pending = res.confirm;
-    showOut(res); setState('idle', '');
-    if (res.say) { $('jvSay').textContent = res.say; await say(res.say); }
+    try {
+      res = await Promise.race([J.call('jarvis.command', { text: heard, history: J.state.jh.slice(-8), pending: H.pending }), new Promise((_r, rej) => setTimeout(() => rej(new Error('Le moteur met trop de temps à répondre.')), 150000))]);
+    } catch (e) { res = { ok: false, say: 'Je n’ai pas pu terminer : ' + e.message }; }
+    if (wait$) wait$.remove();
+    if (id !== H.turnId || !onPage()) { H.busy = false; return null; } // interrompu par l'utilisateur ou page quittée
+    H.busy = false; H.pending = res.confirm || null;
+    if (res.settingsChanged || res.refreshParlement) { try { await J.refreshMeta(); if (res.refreshParlement) { if (J.drawChrome) J.drawChrome(); const pb = document.querySelector('.jv-parl b'); if (pb) pb.textContent = J.parlName(J.P.actif); } } catch { /* ok */ } }
+    if (res.stop) { halt(); setState('idle', 'Je me tais. Touchez l’orbe (ou Espace) pour me parler.'); return res; }
+    if (res.newConversation) resetConversation();
+    if (res.readLast) {
+      const txt = H.last && (H.last.readAloud || H.last.md);
+      setState('idle', ''); await say(txt ? J.plain(txt) : 'Je n’ai rien à lire pour le moment.'); return res;
+    }
+    if (!res.repeat && !res.newConversation) J.state.jh.push({ role: 'user', content: heard }, { role: 'assistant', content: res.say || '' });
+    J.state.jh = J.state.jh.slice(-40);
+    if (res.say) addMsg(res.ok === false ? 'bot err' : 'bot', res.say);
+    if (!res.repeat) showOut(res);
+    setState('idle', '');
+    if (res.say) await say(res.say);
     if (res.readAll && onPage()) await J.readMails(res.messages, (i) => { J.$$('.jv-mail').forEach((c) => c.classList.toggle('reading', c.id === 'jm' + i)); });
     if (res.replyTo && onPage()) { res.end = true; await J.mailReply(res.replyTo, res.replyInstruction); }
     if (res.navigate && onPage()) J.go(res.navigate);
@@ -129,17 +161,24 @@
   }
 
   // ---------- Écoute ----------
+  const micError = (e) => {
+    const hint = { MIC: ['Micro refusé : autorisez Jarvis Parlement dans Réglages Système › Confidentialité et sécurité › Microphone, puis touchez l’orbe.', 'openMic', 'Ouvrir les réglages'], NOMIC: [e.message, 'openSound', 'Réglages du son'], BUSY: [e.message, null], MICERR: [e.message, null] }[e.code];
+    setState('idle', ''); notice(hint ? hint[0] : (e.message || 'Le micro est inaccessible.'), hint && hint[1], hint && hint[2]); return null;
+  };
   async function listenOnce() {
-    if (!J.S._env.sttReady) { setState('idle', 'La reconnaissance vocale n’est pas disponible. Écrivez votre demande ci-dessous.'); return null; }
+    if (!J.S._env.sttReady) { setState('idle', ''); notice('La reconnaissance vocale n’est pas disponible. Écrivez votre demande ci-dessous, ou configurez-la dans Réglages › Voix.', 'jvSetup', 'Ouvrir les réglages'); return null; }
     let h;
-    try { h = await J.listen({ vad: true, noSpeechMs: 9000, onLevel: (v) => { H.level = v; } }); }
-    catch (e) { setState('idle', e.code === 'MIC' ? 'Micro refusé : autorisez Jarvis Parlement dans Réglages Système › Confidentialité › Micro.' : e.message); if (e.code === 'MIC') J.call('voice.openMicSettings'); return null; }
-    H.listening = h; setState('listening', 'Je vous écoute…');
-    const r = await h.done; H.listening = null;
-    if (!r.wav) { H.empties++; return ''; }
-    H.empties = 0; setState('thinking', 'Je transcris…');
-    try { return (await J.transcribe(r.wav)).trim(); }
-    catch (e) { setState('idle', e.message); J.toast(e.message, 'err'); return null; }
+    try { h = await J.listen({ vad: true, noSpeechMs: 9000, endSilenceMs: 1300, onLevel: (v) => { H.level = v; } }); } catch (e) { return micError(e); }
+    H.listening = h; notice(''); setState('listening');
+    const r = await h.done; H.listening = null; H.level = 0;
+    if (r.reason === 'error') { setState('idle', ''); notice('Le micro s’est déconnecté. Vérifiez-le puis touchez l’orbe.'); return null; }
+    if (!r.wav) { if (r.reason === 'manual') { setState('idle', ''); return null; } H.empties++; return ''; }
+    setState('thinking', 'Je transcris…');
+    try {
+      const text = J.cleanHeard((await J.transcribe(r.wav)).trim());
+      if (!text) { H.empties++; return ''; }
+      H.empties = 0; return text;
+    } catch (e) { setState('idle', ''); notice('Je n’ai pas pu transcrire : ' + e.message + ' Vous pouvez aussi écrire votre demande ci-dessous.'); return null; }
   }
   async function conversation() {
     if (H.loop) return; H.loop = true; const my = ++H.token;
@@ -148,48 +187,65 @@
         const text = await listenOnce();
         if (H.token !== my || !onPage()) break;
         if (text === null) break;
-        if (text === '') { if (H.empties >= 2) { setState('idle', 'Je reste disponible : touchez l’orbe pour me parler.'); break; } continue; }
-        const res = await turn(text);
-        if (!store.get('converse', true) || res?.end || H.token !== my) break;
+        if (text === '') { if (H.empties >= 2) { setState('idle', 'Je reste disponible : touchez l’orbe ou appuyez sur Espace pour me parler.'); break; } continue; }
+        const res = await turn(text, { voice: true });
+        if (!res || !store.get('converse', true) || res.end || H.token !== my) break;
+        await wait(350); // laisse retomber l'écho de la voix avant de rouvrir le micro
       }
-    } finally { H.loop = false; if (onPage() && H.state !== 'speaking' && !H.listening) setState('idle'); }
+    } catch (e) { setState('idle', ''); notice('Un problème est survenu : ' + e.message); }
+    finally { if (H.token === my) H.loop = false; if (onPage() && H.state !== 'speaking' && !H.listening && H.state !== 'thinking') setState('idle'); }
   }
-  const halt = () => { J.stopReading(); H.token++; if (H.listening) { H.listening.stop(); H.listening = null; } J.stopSpeak(); H.loop = false; H.state = 'idle'; };
-  J.leave = () => { halt(); const m = $('main'); if (m) m.classList.remove('jv-main'); };
+  // Arrêt immédiat : voix, lecture des mails, écoute, tour en cours.
+  const halt = () => { J.stopReading(); H.token++; H.turnId++; H.busy = false; if (H.listening) { H.listening.stop(); H.listening = null; } J.stopSpeak(); H.loop = false; H.level = 0; H.state = 'idle'; };
+  const stopAll = () => { halt(); const w = document.querySelector('#jvLog .wait'); if (w) w.remove(); J.$$('.jv-mail').forEach((c) => c.classList.remove('reading')); if (onPage()) setState('idle', ''); };
+  const onKey = (e) => {
+    if (!onPage()) return;
+    const el = document.activeElement; const typing = el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable);
+    if (document.querySelector('#modal-root .modal')) return;
+    if (e.key === 'Escape') { if (H.listening || J.speaking || H.loop || H.state !== 'idle') { e.preventDefault(); stopAll(); } else if (typing) el.blur(); return; }
+    if (typing || e.metaKey || e.ctrlKey || e.altKey || (el && /^(BUTTON|A)$/.test(el.tagName))) return;
+    if (e.key === ' ') { e.preventDefault(); J.act.jvOrb(); } else if (e.key === '/') { e.preventDefault(); const i = $('jvIn'); if (i) i.focus(); }
+  };
+  document.addEventListener('keydown', onKey);
+  J.leave = () => { halt(); stopOrb(); const m = $('main'); if (m) m.classList.remove('jv-main'); };
 
   // ---------- Page ----------
   J.pages.accueil = async (root) => {
     halt(); H.empties = 0; $('main').classList.add('jv-main');
     const g = await J.call('jarvis.greeting'); const first = !J.state.greeted; const muted = store.get('muted', false);
-    const nom = g.nom;
-    root.innerHTML = `<div id="jv" class="jv${first ? '' : ' compact'}">
-      <div class="jv-top"><span class="jv-parl">Parlement actif : <b>${J.esc(J.parlName(J.P.actif))}</b></span><span class="row"><a class="jv-link" href="#tableau">Tableau de bord</a><button class="jv-ico" id="jvMute" data-act="jvMute" title="Couper ou activer la voix de Jarvis">${muted ? '🔇' : '🔊'}</button></span></div>
-      <div class="jv-eyebrow">VOTRE ASSISTANT PARLEMENTAIRE</div>
-      <button class="orb-btn" id="orbBtn" data-act="jvOrb" data-state="idle" aria-label="Parler à Jarvis"><canvas id="orb" width="1000" height="1000"></canvas></button>
-      <div class="jv-hello" id="jvHello" aria-live="polite">
-        <div class="h1" id="jh1">Bonjour</div>
-        ${nom ? `<div class="h2" id="jh2">${J.esc(nom)}</div>` : ''}
-        <div class="h3" id="jh3">Que puis-je faire pour vous aujourd’hui ?</div>
+    const nom = g.nom; const hasHist = J.state.jh.length > 0; const comp = !first && hasHist;
+    root.innerHTML = `<section id="jv" class="jv${comp ? ' compact' : ''}" data-state="idle" aria-label="Conversation avec Jarvis">
+      <div class="jv-top"><span class="jv-parl">Parlement actif : <b>${J.esc(J.parlName(J.P.actif))}</b></span><span class="row"><button class="jv-link" data-act="jvNew" title="Effacer la conversation et repartir de zéro">Nouvelle conversation</button><a class="jv-link" href="#tableau">Tableau de bord</a><button class="jv-ico" id="jvMute" data-act="jvMute" aria-pressed="${muted}" aria-label="${muted ? 'Activer la voix de Jarvis' : 'Couper la voix de Jarvis'}" title="Couper ou activer la voix de Jarvis">${muted ? '🔇' : '🔊'}</button></span></div>
+      <div class="jv-hero">
+        <div class="jv-eyebrow">VOTRE ASSISTANT PARLEMENTAIRE</div>
+        <button class="orb-btn" id="orbBtn" data-act="jvOrb" data-state="idle" aria-label="Parler à Jarvis" aria-pressed="false" aria-keyshortcuts="Space"><canvas id="orb" width="800" height="800" aria-hidden="true"></canvas></button>
+        <div class="jv-hello" id="jvHello" aria-live="polite">
+          <div class="h1" id="jh1">Bonjour</div>
+          ${nom ? `<div class="h2" id="jh2">${J.esc(nom)}</div>` : ''}
+          <div class="h3" id="jh3">Que puis-je faire pour vous aujourd’hui ?</div>
+        </div>
       </div>
-      ${J.S._env.piperReady || store.get('voiceLater', false) ? '' : `<div class="jv-voice" id="jvVoice"><span>🎙 Pour une <b>vraie voix humaine</b> (gratuite, hors-ligne, ≈ 21 Mo), choisissez la mienne :</span><span class="row"><button data-act="jvVoiceInstall" data-id="siwis">Voix de femme</button><button data-act="jvVoiceInstall" data-id="tom">Voix d’homme</button><button class="ghost" data-act="jvVoiceLater">Plus tard</button></span><span class="small" id="progress"></span></div>`}
-      <ul class="jv-lines" id="jvCan"></ul>
-      <div class="jv-chips" id="jvChips"></div>
-      <div class="jv-status" id="jvStatus"></div>
-      <div class="jv-heard" id="jvHeard"></div>
-      <div class="jv-say" id="jvSay"></div>
-      <div id="jvOut" class="jv-out"></div>
+      <div class="jv-stage" id="jvStage" tabindex="-1">
+        ${J.S._env.piperReady || store.get('voiceLater', false) ? '' : `<div class="jv-voice" id="jvVoice" role="region" aria-label="Voix humaine"><span>🎙 Pour une <b>vraie voix humaine</b> (gratuite, hors-ligne, ≈ 21 Mo), choisissez la mienne :</span><span class="row"><button data-act="jvVoiceInstall" data-id="siwis">Voix de femme</button><button data-act="jvVoiceInstall" data-id="tom">Voix d’homme</button><button class="ghost" data-act="jvVoiceLater">Plus tard</button></span><span class="small" id="progress"></span></div>`}
+        <ul class="jv-lines" id="jvCan"></ul>
+        <div class="jv-chips" id="jvChips"></div>
+        <div class="jv-log" id="jvLog" role="log" aria-live="polite" aria-label="Conversation"></div>
+        <div id="jvOut" class="jv-out"></div>
+      </div>
+      <div class="jv-dock"><div class="jv-status" id="jvStatus" role="status" aria-live="polite"></div><div class="jv-notice" id="jvNotice" role="alert" hidden></div></div>
       <div class="jv-bar">
-        <button class="jv-mic" data-act="jvOrb" title="Parler (touchez à nouveau pour terminer)">🎤 Parler à Jarvis</button>
-        <input id="jvIn" placeholder="Dites-moi : « Fais une veille sur le logement à Bruxelles »…" autocomplete="off">
+        <button class="jv-mic" id="jvMic" data-act="jvOrb" aria-pressed="false" aria-keyshortcuts="Space" title="Parler (Espace) — touchez à nouveau pour terminer">🎤 Parler à Jarvis</button>
+        <input id="jvIn" aria-label="Votre demande à Jarvis" placeholder="Dites-moi : « Fais une veille sur le logement à Bruxelles »…" autocomplete="off">
         <button class="pri" data-act="jvSend">Envoyer</button>
       </div>
-      <label class="jv-conv"><input type="checkbox" id="jvConv" ${store.get('converse', true) ? 'checked' : ''}> Conversation continue (j’écoute à nouveau après chaque réponse)</label>
-    </div>`;
-    startOrb($('orb'));
+      <div class="jv-foot"><label class="jv-conv"><input type="checkbox" id="jvConv" ${store.get('converse', true) ? 'checked' : ''}> Conversation continue (j’écoute à nouveau après chaque réponse)</label><span class="jv-keys">Espace : parler · Échap : arrêter · / : écrire</span></div>
+    </section>`;
+    J.state.jh.forEach((m) => { if (m.content) addMsg(m.role === 'user' ? 'me' : 'bot', m.content); });
+    startOrb($('orb')); setState('idle');
     $('jvIn').addEventListener('keydown', (e) => { if (e.key === 'Enter') J.act.jvSend(); });
     $('jvConv').addEventListener('change', (e) => store.set('converse', e.target.checked));
 
-    if (!first) { ['jh1', 'jh2', 'jh3'].forEach((id) => $(id)?.classList.add('in')); renderAbilities(g, false); if (J.state.jh.length === 0) $('jv').classList.remove('compact'); return; }
+    if (!first) { ['jh1', 'jh2', 'jh3'].forEach((id) => $(id)?.classList.add('in')); renderAbilities(g, false); return; }
     // Première arrivée : salutation parlée, lignes qui apparaissent au rythme de la voix.
     J.state.greeted = true;
     const lines = [$('jh1'), $('jh2'), $('jh3')].filter(Boolean);
@@ -197,7 +253,7 @@
     const per = speak ? 80 : 0;
     lines[0].classList.add('in');
     if (lines[1]) setTimeout(() => lines[1] && onPage() && lines[1].classList.add('in'), 700 + per * 2);
-    setTimeout(() => onPage() && $('jh3').classList.add('in'), 1500 + per * (nom.length / 2 + 4));
+    setTimeout(() => onPage() && $('jh3') && $('jh3').classList.add('in'), 1500 + per * (nom.length / 2 + 4));
     const introMs = speak ? Math.max(3500, g.intro.length * 68) : 2400;
     setTimeout(() => onPage() && renderAbilities(g, true), introMs);
     const my = H.token;
@@ -210,17 +266,19 @@
 
   // ---------- Actions ----------
   J.act.jvOrb = () => {
-    if (H.listening) { H.listening.stop(); return; }
-    if (H.state === 'thinking') return;
-    if (J.speaking) { J.stopReading(); H.token++; H.loop = false; setState('idle'); }
-    conversation();
+    if (H.listening) { H.listening.stop(); return; }                   // terminer l'écoute maintenant
+    if (H.state === 'thinking') { stopAll(); notice('Demande annulée.'); return; }
+    if (J.speaking || H.state === 'speaking') { stopAll(); return; }   // un clic coupe la voix immédiatement
+    notice(''); conversation();
   };
   J.act.jvSend = async () => {
-    const i = $('jvIn'); const t = i.value.trim(); if (!t) return; i.value = '';
-    if (H.listening) { H.listening.stop(); H.token++; H.loop = false; }
-    J.stopSpeak(); H.token++; H.loop = false; await turn(t);
+    const i = $('jvIn'); const t = i.value.trim(); if (!t) return;
+    if (H.busy) { J.toast('Je réfléchis encore à votre demande précédente…'); return; }
+    i.value = ''; halt(); await turn(t);
   };
   J.act.jvSay = (el) => { $('jvIn').value = el.dataset.t; J.act.jvSend(); };
+  J.act.jvNew = () => { stopAll(); resetConversation(); notice(''); const r = $('jv'); if (r) r.classList.remove('compact'); J.call('jarvis.command', { text: 'nouvelle conversation' }).catch(() => {}); };
+  J.act.openSound = () => J.call('app.openExternal', { url: 'x-apple.systempreferences:com.apple.Sound-Settings.extension' }).catch(() => {});
   J.act.jvAbility = (el) => {
     J.call('jarvis.greeting').then((g) => {
       const ab = g.abilities.find((x) => x.id === el.dataset.id); if (!ab) return;
@@ -231,7 +289,7 @@
   };
   J.act.jvVoiceInstall = async (el) => {
     const box = $('jvVoice'); box.querySelectorAll('button').forEach((b) => { b.disabled = true; });
-    try { await J.call('voice.install', { voiceId: el.dataset.id }); await J.refreshMeta(); box.innerHTML = '<span>✓ Voix installée. Elle sera utilisée par défaut — vous pouvez en changer dans Réglages › Voix.</span>'; setTimeout(() => box.remove(), 6000); await say(el.dataset.id === 'tom' ? 'Bonjour, voici ma voix. Que puis-je faire pour vous ?' : 'Bonjour, voici ma voix. Que puis-je faire pour vous ?'); }
+    try { await J.call('voice.install', { voiceId: el.dataset.id }); await J.refreshMeta(); box.innerHTML = '<span>✓ Voix installée. Elle sera utilisée par défaut — vous pouvez en changer dans Réglages › Voix.</span>'; setTimeout(() => box.remove(), 6000); await say('Bonjour, voici ma voix. Que puis-je faire pour vous ?'); }
     catch (e) { J.err(e); box.querySelectorAll('button').forEach((b) => { b.disabled = false; }); }
   };
   J.act.jvVoiceLater = () => { store.set('voiceLater', true); $('jvVoice')?.remove(); };
@@ -244,6 +302,6 @@
   J.act.jvGo = (el) => J.go(el.dataset.page);
   J.act.jvFile = (el) => J.call('app.openPath', { p: el.dataset.p });
   J.act.jvCopy = () => J.copy(H.last?.md || '');
-  J.act.jvRead = () => { if (J.speaking) { J.stopSpeak(); setState('idle'); } else say(H.last?.readAloud || H.last?.md || ''); };
-  J.act.jvMute = (el) => { const m = !store.get('muted', false); store.set('muted', m); el.textContent = m ? '🔇' : '🔊'; if (m) J.stopSpeak(); };
+  J.act.jvRead = () => { if (J.speaking) { J.stopSpeak(); setState('idle'); } else say(J.plain(H.last?.readAloud || H.last?.md || '')); };
+  J.act.jvMute = (el) => { const m = !store.get('muted', false); store.set('muted', m); el.textContent = m ? '🔇' : '🔊'; el.setAttribute('aria-pressed', String(m)); el.setAttribute('aria-label', m ? 'Activer la voix de Jarvis' : 'Couper la voix de Jarvis'); if (m) J.stopSpeak(); };
 })();

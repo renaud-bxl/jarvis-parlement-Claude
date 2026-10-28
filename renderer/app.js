@@ -38,8 +38,9 @@ async function render(keep) {
   const timer = setTimeout(() => { if (token === render.token && !root.childElementCount) root.innerHTML = cur === 'accueil' ? '' : J.skeleton(); }, 140);
   try { await fn(root, arg); }
   catch (e) {
+    if (token !== render.token) return; // rendu périmé (l'utilisateur a déjà changé de page) : on l'ignore
     console.error(e);
-    if (token === render.token) root.innerHTML = `<div class="empty err" role="alert"><b>Cette page n'a pas pu s'afficher</b>${J.esc(J.errMsg(e))}<div class="row"><button class="pri" data-act="reload">Réessayer</button><a class="btn" href="#accueil">Retour à Jarvis</a></div></div>`;
+    root.innerHTML = `<div class="empty err" role="alert"><b>Cette page n'a pas pu s'afficher</b>${J.esc(J.errMsg(e))}<div class="row"><button class="pri" data-act="reload">Réessayer</button><a class="btn" href="#accueil">Retour à Jarvis</a></div></div>`;
   } finally { clearTimeout(timer); }
   if (token !== render.token) return;
   view.removeAttribute('aria-busy');
@@ -87,6 +88,6 @@ window.addEventListener('unhandledrejection', (e) => { console.error(e.reason); 
   drawChrome();
   // Premier lancement : le parcours « Mise en route » s'ouvre dans Réglages.
   const o = J.onb();
-  if (!location.hash && !J.S.firstRunDone && !o.dismissed && !o.all) location.hash = '#reglages/miseenroute';
+  if (!location.hash && !J.S.firstRunDone && !o.dismissed && !o.all) { location.hash = '#reglages/miseenroute'; return; } // hashchange déclenche le rendu
   render();
 })();

@@ -20,7 +20,7 @@ J.pages.recherche = async (root) => {
 J.act.rEx = (el) => { const t = document.getElementById('rq'); t.value = el.dataset.t; t.focus(); };
 J.act.doResearch = (el) => J.busy(el, async () => {
   const q = J.val('rq'); if (!q.trim()) { document.getElementById('rq').focus(); throw new Error('Décris le sujet à rechercher.'); }
-  document.getElementById('rOut').innerHTML = `<div class="card"><p class="muted small"><span class="spin" aria-hidden="true"></span> Jarvis consulte le web et tes sources (30 à 90 secondes)…</p>${J.skeleton(2)}</div>`;
+  document.getElementById('rOut').innerHTML = `<div class="card"><p class="muted small"><span class="spin" aria-hidden="true"></span> Jarvis consulte le web et tes sources (30 à 90 secondes)…</p>${J.skeleton(2)}<button class="sm" data-act="aiCancel">Arrêter</button></div>`;
   let r; try { r = await J.call('research.web', { query: q, parlement: J.val('rp'), dossierId: J.val('rd') || undefined, deep: J.val('rdeep') }); } catch (e) { outError('rOut', e, 'doResearch'); throw e; }
   J.state.lastResearch = r;
   document.getElementById('rOut').innerHTML = `<div class="card"><div class="row sp"><h2>Résultat</h2><span class="row">${J.speakBtn('#rBody')}<button class="sm" data-act="rCopy">${J.icon('copy')} Copier</button><button class="sm" data-act="rToDraft">Rédiger à partir de ceci</button><button class="sm" data-act="rToDossier">Créer un dossier</button></span></div><div id="rBody">${J.md(r.answer)}</div>${sourcesHtml(r.sources)}${r.file ? `<p class="path">Enregistré : ${J.esc(r.file)}</p>` : ''}</div>`;
@@ -46,7 +46,7 @@ J.pages.redaction = async (root) => {
 };
 J.act.doDraft = (el) => J.busy(el, async () => {
   if (!J.val('ws').trim()) { document.getElementById('ws').focus(); throw new Error('Indique le sujet de ton texte.'); }
-  document.getElementById('wOut').innerHTML = `<div class="card"><p class="muted small"><span class="spin" aria-hidden="true"></span> Jarvis rédige ton brouillon…</p>${J.skeleton(3)}</div>`;
+  document.getElementById('wOut').innerHTML = `<div class="card"><p class="muted small"><span class="spin" aria-hidden="true"></span> Jarvis rédige ton brouillon…</p>${J.skeleton(3)}<button class="sm" data-act="aiCancel">Arrêter</button></div>`;
   let r; try { r = await J.call('draft.run', { instrumentId: J.val('wi'), subject: J.val('ws'), context: J.val('wc'), language: J.val('wl') || undefined, dossierId: J.val('wd') || undefined, instructions: J.val('wx') }); } catch (e) { outError('wOut', e, 'doDraft'); throw e; }
   J.state.lastDraft = { ...r, dossierId: J.val('wd') || undefined };
   document.getElementById('wOut').innerHTML = `<div class="card"><div class="row sp"><h2>${J.esc(r.label)} <span class="muted small">· ${J.esc(r.parlement)}</span></h2><span class="row">${J.speakBtn('#wText')}<button class="sm" data-act="wFb" data-v="1" aria-label="Bon brouillon" title="Bon brouillon">${J.icon('up')}</button><button class="sm" data-act="wFb" data-v="-1" aria-label="Brouillon à améliorer" title="À améliorer">${J.icon('down')}</button></span></div>
@@ -94,7 +94,7 @@ J.pages.documents = async (root) => {
 J.act.pickDoc = async () => { const p = await J.call('doc.pick'); if (p) document.getElementById('dFile').value = p; };
 J.act.doAnalyze = (el) => J.busy(el, async () => {
   const file = J.val('dFile'); if (!file) throw new Error('Choisis d\'abord un document avec « Choisir un fichier… ».');
-  document.getElementById('aOut').innerHTML = `<p class="muted small"><span class="spin" aria-hidden="true"></span> Lecture et analyse du document…</p>${J.skeleton(2)}`;
+  document.getElementById('aOut').innerHTML = `<p class="muted small"><span class="spin" aria-hidden="true"></span> Lecture et analyse du document…</p>${J.skeleton(2)}<button class="sm" data-act="aiCancel">Arrêter</button>`;
   let r; try { r = await J.call('doc.analyze', { file, question: J.val('dQst'), allowCloud: J.S._env.local ? true : J.val('dCloud') }); } catch (e) { outError('aOut', e, 'doAnalyze'); throw e; }
   document.getElementById('aOut').innerHTML = `<p class="muted small">${r.chars.toLocaleString('fr-BE')} caractères analysés · ${r.local ? 'moteur local' : 'moteur cloud'} · sans recherche web</p><div id="aBody">${J.md(r.answer)}</div><div class="row" style="margin-top:8px"><button class="sm" data-act="aCopy">${J.icon('copy')} Copier</button>${J.speakBtn('#aBody')}</div>`;
   J.state.lastAnalysis = r.answer;

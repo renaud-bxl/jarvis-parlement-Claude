@@ -325,12 +325,14 @@ function create(ctx) {
     'voice.install': ({ voiceId } = {}) => voice.install(str(voiceId, 'Voix', 50), ctx.emit),
     'voice.removeVoice': ({ voiceId } = {}) => voice.removeVoice(str(voiceId, 'Voix', 50)),
     'voice.synth': ({ text } = {}) => voice.synth(str(text, 'Texte', 20000, { empty: true })),
-    'voice.micStatus': async () => {
+    'voice.micStatus': async ({ ask } = {}) => {
       const sp = ctx.systemPreferences; if (!sp || process.platform !== 'darwin') return 'granted';
       const st = sp.getMediaAccessStatus('microphone');
+      if (st === 'not-determined' && ask === false) return st; // afficher l'état sans ouvrir la demande système
       if (st === 'not-determined') return (await sp.askForMediaAccess('microphone')) ? 'granted' : 'denied';
       return st;
     },
+    'voice.openSpeechSettings': () => ctx.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_SpeechRecognition'),
     'voice.openMicSettings': () => ctx.shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone'),
 
     // ---- Divers ----
