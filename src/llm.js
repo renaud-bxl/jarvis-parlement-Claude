@@ -281,7 +281,7 @@ function normMessages(messages) {
  * complete({ system, messages|prompt, web, fast, maxTokens, json, signal })
  * -> { text, sources, model, truncated, data? }
  */
-async function complete(o) {
+async function completeRaw(o) {
   const ai = cfg();
   const messages = normMessages(o.messages || [{ role: 'user', content: o.prompt }]);
   const maxTokens = Math.min(Math.max(Number(o.maxTokens) || 4096, 16), 64000);
@@ -309,6 +309,9 @@ async function complete(o) {
   if (o.json) out.data = parseJson(out.text);
   return out;
 }
+
+// Un appel réussi prouve que le moteur IA fonctionne : l'étape « Moteur IA » de la mise en route se coche toute seule.
+async function complete(o) { const r = await completeRaw(o); if (r && (r.text || r.data)) store.markOnboarding('aiOk'); return r; }
 
 async function ping() {
   const t0 = Date.now();

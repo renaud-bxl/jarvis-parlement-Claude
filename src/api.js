@@ -368,6 +368,7 @@ function create(ctx) {
       if (process.env.JARVIS_FAKE_MIC === '1' && !ctx.app.isPackaged) return 'granted'; // tests avec micro simulé (jamais dans l'app installée)
       const sp = ctx.systemPreferences; if (!sp || process.platform !== 'darwin') return 'granted';
       const st = sp.getMediaAccessStatus('microphone');
+      if (st === 'granted') store.markOnboarding('micOk');
       if (st === 'not-determined' && ask === false) return st; // afficher l'état sans ouvrir la demande système
       if (st === 'not-determined') return (await sp.askForMediaAccess('microphone')) ? 'granted' : 'denied';
       return st;

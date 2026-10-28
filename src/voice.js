@@ -181,7 +181,8 @@ function transcribeMacos(buf, lang, offline = false) {
         if (/HORS_LIGNE/.test(m)) { const x = new Error("La reconnaissance vocale hors-ligne du français n'est pas installée sur ce Mac : Réglages Système › Clavier › Dictée › Langues › ajoute le français."); x.code = 'OFFLINE'; return reject(x); }
         return reject(new Error(m.replace(/^\w+ : /, '').replace(/MODE:\w+/g, '').trim().slice(0, 200) || 'Reconnaissance vocale impossible.'));
       }
-      resolve({ text: String(so).trim(), mode });
+      const text = String(so).trim(); if (text) store.markOnboarding('micOk', 'speechOk'); // une phrase reconnue prouve que micro et reconnaissance vocale fonctionnent
+      resolve({ text, mode });
     });
   });
 }

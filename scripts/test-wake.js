@@ -51,5 +51,13 @@ ok('pas de faux réveil : conversations voisines, « Jarvis » au milieu d\'une 
   assert.strictEqual(await voice.speechStatus(false), '--status'); assert.strictEqual(await voice.speechStatus(true), '--authorize'); ok('état de l\'autorisation vocale : lecture simple, ou demande affichée à l\'utilisateur');
   fs.writeFileSync(path.join(res, 'jarvis-listen'), '#!/bin/sh\necho "AUTORISATION_ATTENTE : x" 1>&2\nexit 8\n', { mode: 0o755 });
   await assert.rejects(() => voice.transcribe({ audio: Buffer.alloc(4000).toString('base64'), mime: 'audio/wav' }), /n'a pas affiché la demande/); ok('demande macOS jamais affichée : message clair avec le chemin des Réglages Système');
+  // ---- Les étapes se cochent toutes seules dès que ça fonctionne réellement ----
+  store.settings.set({ onboarding: { aiOk: false, micOk: false, speechOk: false } });
+  const llm = require('../src/llm'); global.fetch = async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ content: [{ type: 'text', text: 'OK' }], stop_reason: 'end_turn' }) });
+  store.setSecret('anthropic_key', 'sk-test'); store.settings.set({ ai: { provider: 'anthropic' } });
+  assert(!store.settings.get().onboarding.aiOk); await llm.complete({ prompt: 'ping', maxTokens: 16 }); assert(store.settings.get().onboarding.aiOk === true); ok('un appel IA réussi coche l\'étape « Moteur IA » sans passer par le bouton de test');
+  fs.writeFileSync(path.join(res, 'jarvis-listen'), '#!/bin/sh\necho "MODE:device" 1>&2\necho "bonjour Jarvis"\n', { mode: 0o755 });
+  assert(!store.settings.get().onboarding.micOk); await voice.transcribe({ audio: Buffer.alloc(4000).toString('base64'), mime: 'audio/wav' }); const o2 = store.settings.get().onboarding; assert(o2.micOk === true && o2.speechOk === true); ok('une phrase reconnue coche micro et reconnaissance vocale');
+  assert(/setup-x/.test(fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8'))); ok('le rappel « Mise en route » de la barre latérale peut être masqué (×)');
   console.log('\nTous les tests micro / voix passent ✅'); fs.rmSync(tmp, { recursive: true, force: true }); process.exit(0);
 })().catch((e) => { console.error('\n❌ ÉCHEC :', e); process.exit(1); });

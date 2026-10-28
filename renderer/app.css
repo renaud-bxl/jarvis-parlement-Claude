@@ -154,3 +154,5 @@ label.dchip input:checked+span{background:var(--acc2);border-color:var(--acc2);c
 #main.jv-main{background:radial-gradient(130% 80% at 50% 8%,#0b2d63 0%,#071a3d 38%,#040c20 100%)}
 #main.jv-main #view{max-width:none;padding:0;margin:0}
 .mic-meter{height:8px;border-radius:99px;background:var(--soft);overflow:hidden;margin:6px 0}.mic-meter b{display:block;height:100%;width:0;background:#38d27a;border-radius:99px;transition:width .08s linear}
+.setup-hint-row{display:flex;gap:6px;align-items:stretch;margin-bottom:6px}.setup-hint-row .setup-hint{flex:1;margin:0}
+.setup-x{flex:none;width:30px;border-radius:10px;border:1px solid rgba(255,210,31,.45);background:transparent;color:#ffd21f;font-size:16px;line-height:1;padding:0;cursor:pointer;justify-content:center}.setup-x:hover{background:rgba(255,210,31,.15)}

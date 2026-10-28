@@ -1,7 +1,7 @@
 {
   "name": "jarvis-parlement",
   "productName": "Jarvis Parlement",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Assistant parlementaire complet : veille, recherche, rédaction, courriels, agenda — avec un cerveau qui apprend vos préférences.",
   "main": "main.js",
   "author": "Jarvis Parlement",

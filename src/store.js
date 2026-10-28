@@ -162,4 +162,9 @@ function plainSecretNames() { return Object.entries(secretsRead()).filter(([, x]
 const uid = (p = 'id') => p + '_' + crypto.randomBytes(5).toString('hex');
 const now = () => new Date().toISOString();
 
-module.exports = { DIR, DOCS_DEFAULT, read, write, update, settings, setSecret, getSecret, hasSecret, canEncrypt, plainSecretNames, corruptFiles, uid, now, deepMerge };
+// Mise en route : une étape est cochée dès qu'elle a réellement fonctionné (un appel IA réussi, une phrase reconnue…), sans attendre que l'utilisateur passe par le bouton de test.
+function markOnboarding(...keys) {
+  try { const cur = settings.get().onboarding || {}; const todo = keys.filter((k) => cur[k] !== true); if (todo.length) settings.set({ onboarding: Object.fromEntries(todo.map((k) => [k, true])) }); } catch { /* sans effet sur le fonctionnement */ }
+}
+
+module.exports = { markOnboarding, DIR, DOCS_DEFAULT, read, write, update, settings, setSecret, getSecret, hasSecret, canEncrypt, plainSecretNames, corruptFiles, uid, now, deepMerge };
