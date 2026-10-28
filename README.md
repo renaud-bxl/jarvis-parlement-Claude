@@ -1,5 +1,7 @@
 # Jarvis Parlement
 
+📄 **Page de présentation :** https://renaud-bxl.github.io/jarvis-parlement-Claude/
+
 Application Mac complète pour parlementaires : de la **veille** à la **question ou interpellation déposée**, avec un **cerveau** qui apprend vos préférences au fil de l'usage.
 
 ## Installer (une commande)

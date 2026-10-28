@@ -190,6 +190,8 @@ process.on('exit', cleanup);
 if (gotLock) {
   app.whenReady().then(() => {
     setup(); menu(); createWindow(); startMailWatch(); startUpdater();
+    // Retour sur l'application : si la dernière vérification date de plus de 30 minutes, on regarde tout de suite s'il y a une nouvelle version.
+    app.on('browser-window-focus', () => { try { modules.updater.checkIfStale(30 * 60000); } catch { /* ok */ } });
     // Voix de Jarvis : toujours une voix humaine (féminine par défaut, fournie avec l'application), chargée dès le démarrage.
     try { modules.voice.ensureDefault((c, d) => emit(c, d)).then(() => modules.voice.warm()).catch(() => {}); } catch { /* sans voix : texte seulement */ }
   });

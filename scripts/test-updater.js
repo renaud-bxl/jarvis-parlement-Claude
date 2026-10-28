@@ -374,6 +374,18 @@ const reset = () => { store.write('update', {}); store.settings.set({ update: { 
   assert(!/require\(['"](electron-updater|electron-builder)/.test(rd('src/updater.js')) && !/autoUpdater/.test(rd('src/updater.js').replace(/\/\/.*$/gm, '')), 'pas d’autoUpdater natif');
   ok('preload (canaux), main.js (démarrage/arrêt/activité), package.json, index.html branchés ; aucun caractère invisible littéral dans les fichiers');
 
+  // ================================================================ Annonce visible + vérification au retour sur l'app ================================================================
+  {
+    reset(); const { inst } = mk();
+    assert.strictEqual(await inst.checkIfStale(30 * 60000), null, 'pas de vérification avant le démarrage'); inst.start();
+    await inst.check({ manual: false });
+    assert.strictEqual(await inst.checkIfStale(30 * 60000), null, 'vérification récente : rien à refaire');
+    clock += 31 * 60000; const r = await inst.checkIfStale(30 * 60000); assert(r !== null, 'vérification périmée : on regarde tout de suite'); inst.stop();
+    ok('retour sur l\'application : nouvelle vérification seulement si la dernière date de plus de 30 minutes');
+    const uiSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'updater-ui.js'), 'utf8'); const appSrc = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8'); const apiSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'api.js'), 'utf8');
+    assert(/jv-update/.test(uiSrc) && /side-update/.test(uiSrc) && /update\.checkStale/.test(uiSrc) && /'updOpen'|data-act = 'updOpen'|data-act="updOpen"/.test(uiSrc) && /'update\.checkStale'/.test(apiSrc)); ok('une version disponible est annoncée sur l\'accueil et dans le menu, avec le bouton « Mettre à jour »');
+    assert(/querySelectorAll\('\.setup-hint-row, \.setup-hint'\)/.test(appSrc)); ok('le rappel « Mise en route » ne s\'empile plus (une seule croix, jamais de croix seules)');
+  }
   fs.rmSync(tmp, { recursive: true, force: true });
   console.log('Mise à jour automatique : tous les tests passent.');
   process.exit(0);

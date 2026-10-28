@@ -561,7 +561,13 @@ function create(o = {}) {
     return status();
   }
 
-  return { start, stop, check, status, install, cancel, skip, snooze, configure, _internals: { resolveTarget, latestOf, nextDelay, doCheck, announce } };
+  // Vérifie seulement si la dernière vérification date de plus de maxAgeMs (retour sur l'app, ouverture de l'accueil) : une version publiée est annoncée sans attendre le prochain passage programmé.
+  async function checkIfStale(maxAgeMs = 30 * 60000) {
+    if (!started || stopped || !cfg().auto) return null;
+    const age = nowFn() - (Date.parse(load().lastCheck) || 0); if (age < Math.max(60000, maxAgeMs)) return null;
+    try { return await check({ manual: false }); } catch { return null; }
+  }
+  return { start, stop, check, checkIfStale, status, install, cancel, skip, snooze, configure, _internals: { resolveTarget, latestOf, nextDelay, doCheck, announce } };
 }
 
 module.exports = {

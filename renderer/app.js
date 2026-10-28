@@ -63,7 +63,7 @@ function drawChrome() {
   b.className = 'badge' + (env.configured ? ' ok' : '');
   b.innerHTML = `<i aria-hidden="true"></i>${env.configured ? (env.local ? 'IA locale prête' : 'IA cloud prête') : 'IA non configurée'}`;
   // Rappel discret tant que la mise en route n'est pas terminée.
-  const foot = document.querySelector('.side-foot'); foot.querySelector('.setup-hint')?.remove();
+  const foot = document.querySelector('.side-foot'); foot.querySelectorAll('.setup-hint-row, .setup-hint').forEach((n) => n.remove());
   const o = J.onb();
   if (!o.dismissed && !o.all) foot.insertAdjacentHTML('afterbegin', `<div class="setup-hint-row"><a class="setup-hint" href="#reglages/miseenroute">Mise en route : ${o.n}/4 · continuer</a><button class="setup-x" data-act="obLater" title="Ne plus afficher ce rappel" aria-label="Ne plus afficher le rappel de mise en route">×</button></div>`);
   if (J.notify) J.notify.paint(); // badge « Courriels » et résumé des alertes de suivi

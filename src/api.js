@@ -444,6 +444,7 @@ function create(ctx) {
     // ---- Mises à jour (GitHub Releases) : toute entrée venant de l'interface est validée ici ----
     'update.status': () => updater.get().status(),
     'update.check': () => updater.get().check({ manual: true }),
+    'update.checkStale': () => updater.get().checkIfStale(30 * 60000).then(() => updater.get().status()),
     'update.install': (a) => { a = obj(a); return updater.get().install({ force: bool(a.force), voice: bool(a.voice) }); },
     'update.cancel': () => updater.get().cancel(),
     'update.skip': (a) => { a = obj(a); const v = updater.parseVersion(a.version); if (!v || v.pre) throw new Error('Version invalide.'); return updater.get().skip(v.text, bool(a.undo)); },

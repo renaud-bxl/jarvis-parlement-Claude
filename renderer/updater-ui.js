@@ -192,5 +192,31 @@
   // Interface rechargée alors qu'une version est déjà connue : l'alerte réapparaît (sans nouvelle notification macOS).
   setTimeout(async () => { try { const s = await J.call('update.status'); ui.status = s; if (s.state === 'available' && s.latest) alertAvailable(s.latest); } catch { /* sans gravité */ } }, 1200);
 
+  // ------------------------------------------------------------------ annonce visible : accueil + barre latérale ------------------------------------------------------------------
+  // Tant qu'une version plus récente est disponible (et pas ignorée), l'accueil et le menu l'affichent en permanence, avec le bouton « Mettre à jour ».
+  const BANNER_CSS = `.jv-update{display:flex;gap:12px;align-items:center;justify-content:center;flex-wrap:wrap;margin:6px auto 0;padding:8px 14px;border-radius:12px;border:1px solid rgba(255,210,31,.6);background:rgba(255,210,31,.14);color:#fff;font-size:14px;max-width:760px;text-align:center}.jv-update b{color:#ffd21f}
+.side-update{display:block;width:100%;margin:0 0 6px;padding:7px 10px;border-radius:10px;border:1px solid rgba(255,210,31,.7);background:rgba(255,210,31,.16);color:#ffe58a;font-size:12px;font-weight:700;text-align:left;cursor:pointer}.side-update:hover{background:rgba(255,210,31,.28)}`;
+  let bannerBusy = false;
+  async function refreshBanner() {
+    if (bannerBusy) return; bannerBusy = true;
+    try {
+      if (!$('upd-banner-css')) { const st = document.createElement('style'); st.id = 'upd-banner-css'; st.textContent = BANNER_CSS; document.head.appendChild(st); }
+      let s = null; try { s = await J.call('update.status'); } catch { s = null; }
+      ui.status = s || ui.status;
+      document.querySelectorAll('.jv-update, .side-update').forEach((n) => n.remove());
+      const v = s && s.state === 'available' && s.latest ? s.latest : null; if (!v) return;
+      const foot = document.querySelector('.side-foot');
+      if (foot) { const b = document.createElement('button'); b.className = 'side-update'; b.dataset.act = 'updOpen'; b.textContent = `⬆ Version ${v.version} disponible · Mettre à jour`; b.setAttribute('aria-label', `Nouvelle version ${v.version} disponible : ouvrir la mise à jour`); foot.insertBefore(b, foot.firstChild); }
+      const top = document.querySelector('#jv .jv-top');
+      if (top) { const d = document.createElement('div'); d.className = 'jv-update'; d.setAttribute('role', 'status'); d.innerHTML = `<span>⬆ <b>Nouvelle version ${esc(v.version)}</b> disponible sur GitHub</span><button class="pri sm" data-act="updOpen">Mettre à jour</button>`; top.insertAdjacentElement('afterend', d); }
+    } finally { bannerBusy = false; }
+  }
+  for (const n of ['updSkip', 'updLater', 'updUnskip']) { const f = J.act[n]; if (typeof f === 'function') J.act[n] = async (...a) => { try { return await f(...a); } finally { refreshBanner(); } }; }
+  // L'écran d'accueil est défini par un script chargé après celui-ci : on l'enveloppe une fois tous les scripts exécutés.
+  setTimeout(() => { const origAccueil = J.pages && J.pages.accueil; if (typeof origAccueil === 'function' && !origAccueil._upd) { const w = async (root, arg) => { await origAccueil(root, arg); refreshBanner(); J.call('update.checkStale').then((st) => { if (st && st.state === 'available') refreshBanner(); }).catch(() => {}); }; w._upd = true; J.pages.accueil = w; } }, 0);
+  if (window.jarvis && window.jarvis.on) for (const ch of ['update-available', 'update-progress', 'update-error']) window.jarvis.on(ch, () => setTimeout(refreshBanner, 300));
+  window.addEventListener('hashchange', () => setTimeout(refreshBanner, 400));
+  setTimeout(refreshBanner, 1500); setInterval(refreshBanner, 5 * 60000);
+
   J.update = { open: openModal, status: () => ui.status, refreshCard, _handle: { onAvailable, onProgress, onError }, _ui: ui };
 })();
