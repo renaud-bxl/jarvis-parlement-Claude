@@ -10,11 +10,13 @@ const templates = require('./templates');
 const dossiers = require('./dossiers');
 const indexer = require('./indexer');
 const research = require('./research');
+const sources = require('./sources');
 const mail = require('./mail');
 const google = require('./google');
 const scheduler = require('./scheduler');
 const diag = require('./diag');
 const workspace = require('./workspace');
+const modeles = require('./modeles');
 
 const SECRETS = new Set(['anthropic_key', 'openai_key', 'compat_key', 'google_client_secret', 'stt_key']);
 const voice = require('./voice');
@@ -22,6 +24,7 @@ const jarvis = require('./jarvis');
 const mailbox = require('./mailbox');
 const mailwatch = require('./mailwatch');
 const ics = require('./ics');
+const updater = require('./updater');
 
 // ---- Validation des arguments venant de l'interface (tout ce qui traverse l'IPC est une entrée non fiable) ----
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -89,6 +92,12 @@ function sanitizeSettingsPatch(raw) {
     if (m.followDays !== undefined && Number.isFinite(Number(m.followDays))) d.followDays = int(m.followDays, 1, 30);
     if (Object.keys(d).length) out.mail = d;
   }
+  if (isObj(p.update)) { // mises à jour : seulement l'interrupteur et la fréquence (le dépôt source est une constante, jamais un réglage)
+    const d = {}; const u = p.update;
+    if (u.auto !== undefined) d.auto = !!u.auto;
+    if (u.checkHours !== undefined && Number.isFinite(Number(u.checkHours))) d.checkHours = Math.min(72, Math.max(1, Math.floor(Number(u.checkHours))));
+    if (Object.keys(d).length) out.update = d;
+  }
   return out;
 }
 
@@ -118,6 +127,7 @@ function create(ctx) {
   const pickFile = async (opts) => { const r = await ctx.dialog.showOpenDialog(win(), opts); return r.canceled ? null : r.filePaths; };
   const knownParlement = (id) => templates.all().parlements.some((p) => p.id === id);
   const writeUserFile = (file, data) => { fs.writeFileSync(file, data, { mode: 0o600 }); return file; };
+  const modeleParl = (id) => { if (id === undefined || id === null || id === '') return store.settings.get().profile.parlementActif; str(id, 'Parlement', 100); if (!knownParlement(id)) throw new Error('Parlement inconnu.'); return id; };
 
   return {
     // ---- Réglages ----
@@ -250,8 +260,44 @@ function create(ctx) {
       research.veilleSetStatus(id, 'dossier'); return d;
     },
 
+    // ---- Sources de veille : catalogue belge (presse, Belga, Moniteur, parlements…), cases à cocher, ajout manuel. Validation stricte dans src/sources.js ----
+    'sources.list': () => sources.list(),
+    'sources.toggle': ({ id, on } = {}) => sources.toggle(idArg(id, 'Source'), on),
+    'sources.setAll': ({ on } = {}) => sources.setAll(on),
+    'sources.reset': () => sources.reset(),
+    'sources.options': (a) => { a = obj(a); return sources.setOptions({ strict: a.strict }); },
+    'sources.add': (a) => {
+      a = obj(a);
+      return sources.add({ name: str(a.name, 'Nom', 300), site: str(a.site, 'Adresse du site', 2000), feed: a.feed === undefined || a.feed === null ? '' : str(a.feed, 'Adresse du flux RSS', 2000, { empty: true }), category: a.category === undefined ? undefined : str(a.category, 'Catégorie', 40, { empty: true }), lang: a.lang === undefined ? undefined : str(a.lang, 'Langue', 10, { empty: true }) });
+    },
+    'sources.remove': ({ id } = {}) => sources.remove(idArg(id, 'Source')),
+
     // ---- Rédaction / assistant ----
-    'draft.run': (a) => research.draft(obj(a)),
+    'draft.run': (a) => { a = obj(a); return research.draft({ ...a, allowCloud: a.allowCloud === true }); },
+
+    // ---- Modèles de documents Word par parlement (dossier 00-Modeles) et fichiers Word produits ----
+    'modeles.list': ({ parlementId } = {}) => modeles.list(modeleParl(parlementId)),
+    'modeles.add': async ({ parlementId, instrumentId } = {}) => {
+      const pid = modeleParl(parlementId); const iid = idArg(instrumentId, 'Type de document');
+      const f = await pickFile({ properties: ['openFile'], filters: [{ name: 'Modèles Word', extensions: ['docx', 'dotx', 'doc', 'odt', 'rtf', 'pdf'] }] });
+      if (!f) return null; return modeles.addFromPath({ parlementId: pid, instrumentId: iid, source: f[0] });
+    },
+    'modeles.remove': ({ parlementId, instrumentId } = {}) => modeles.removeModel({ parlementId: modeleParl(parlementId), instrumentId: idArg(instrumentId, 'Type de document') }),
+    'modeles.assign': ({ parlementId, instrumentId, file } = {}) => modeles.assign({ parlementId: modeleParl(parlementId), instrumentId: idArg(instrumentId, 'Type de document'), file: file === '' || file == null ? '' : str(file, 'Fichier', 260) }),
+    'modeles.analyze': async (a) => { a = obj(a); const pid = modeleParl(a.parlementId), iid = idArg(a.instrumentId, 'Type de document'); await modeles.enrichFiche({ parlementId: pid, instrumentId: iid, allowCloud: a.allowCloud === true }); return modeles.summary(await modeles.loadModel(pid, iid)); },
+    'modeles.setConsent': ({ allow } = {}) => modeles.setConsent(allow === true),
+    'modeles.openFolder': async ({ parlementId } = {}) => { const err = await ctx.shell.openPath(modeles.modelDir(modeleParl(parlementId))); if (err) throw new Error("Impossible d'ouvrir le dossier : " + err); return true; },
+    'modeles.docxText': async ({ path: p } = {}) => modeles.docxText(fs.readFileSync(modeles.validateOutput(str(p, 'Chemin', 4096)))).slice(0, 60000),
+    // Téléchargement : boîte de dialogue d'enregistrement système, puis copie du .docx (uniquement un fichier Word produit dans les dossiers de Jarvis).
+    'modeles.exportDocx': async ({ path: p, name } = {}) => {
+      const real = modeles.validateOutput(str(p, 'Chemin', 4096));
+      const def = path.basename((typeof name === 'string' && name.trim() ? name : real).replace(/\0/g, '')).slice(0, 120) || 'document.docx';
+      const r = await ctx.dialog.showSaveDialog(win(), { defaultPath: def, filters: [{ name: 'Document Word', extensions: ['docx'] }] });
+      if (r.canceled || !r.filePath) return null; return modeles.exportCopy(real, r.filePath);
+    },
+    'modeles.showDocx': ({ path: p } = {}) => { ctx.shell.showItemInFolder(modeles.validateOutput(str(p, 'Chemin', 4096))); return true; },
+    'modeles.openDocx': async ({ path: p } = {}) => { const err = await ctx.shell.openPath(modeles.validateOutput(str(p, 'Chemin', 4096))); if (err) throw new Error("Impossible d'ouvrir le document dans Word : " + err); return true; },
+    'modeles.previewPdf': async ({ path: p } = {}) => { const pdf = await modeles.pdfPreview(str(p, 'Chemin', 4096)); const err = await ctx.shell.openPath(pdf); if (err) throw new Error("Impossible d'ouvrir l'aperçu : " + err); return pdf; },
     'chat.send': (a) => { a = obj(a); return research.chat({ messages: a.messages, useWeb: bool(a.useWeb), useDocs: bool(a.useDocs), allowCloud: a.allowCloud === true }); },
     'jarvis.greeting': () => jarvis.greeting(),
     'jarvis.command': (a) => {
@@ -395,6 +441,20 @@ function create(ctx) {
     },
     'app.loginItem': ({ enabled } = {}) => { ctx.app.setLoginItemSettings({ openAtLogin: !!enabled }); return ctx.app.getLoginItemSettings().openAtLogin; },
     'app.version': () => ctx.app.getVersion(),
+    // ---- Mises à jour (GitHub Releases) : toute entrée venant de l'interface est validée ici ----
+    'update.status': () => updater.get().status(),
+    'update.check': () => updater.get().check({ manual: true }),
+    'update.install': (a) => { a = obj(a); return updater.get().install({ force: bool(a.force), voice: bool(a.voice) }); },
+    'update.cancel': () => updater.get().cancel(),
+    'update.skip': (a) => { a = obj(a); const v = updater.parseVersion(a.version); if (!v || v.pre) throw new Error('Version invalide.'); return updater.get().skip(v.text, bool(a.undo)); },
+    'update.snooze': (a) => { a = obj(a); const v = updater.parseVersion(a.version); if (!v || v.pre) throw new Error('Version invalide.'); return updater.get().snooze(v.text, a.hours === undefined ? 24 : intArg(a.hours, 'Durée', 1, 168)); },
+    'update.configure': (a) => {
+      a = obj(a); const c = {};
+      if (a.auto !== undefined) { if (typeof a.auto !== 'boolean') throw new Error('Réglage invalide.'); c.auto = a.auto; }
+      if (a.checkHours !== undefined) c.checkHours = intArg(a.checkHours, 'Fréquence', 1, 72);
+      if (!Object.keys(c).length) throw new Error('Aucun réglage valide.');
+      return updater.get().configure(c);
+    },
   };
 }
 

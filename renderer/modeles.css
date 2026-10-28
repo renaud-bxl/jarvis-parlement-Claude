@@ -1,0 +1,26 @@
+/* Page « Modèles » et boutons Word. Thème : variables de app.css (clair / sombre). */
+.mdl h2{margin:0;font-size:16px}
+.mdl .mdl-file{margin:10px 0 4px;gap:10px;flex-wrap:wrap;align-items:baseline}
+.mdl .mdl-file .path{font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;max-width:60%}
+.mdl-empty{margin:10px 0;padding:12px 14px;border-radius:10px;background:var(--soft);color:var(--mute);font-size:13.5px}
+.mdl-empty b{color:var(--ink)}
+.mdl-detail{margin:10px 0;padding:12px 14px;border-radius:10px;background:var(--soft);border:1px solid var(--line)}
+.mdl-detail h3{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute);margin:12px 0 6px}
+.mdl-facts{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--mute)}
+.mdl-facts b{color:var(--ink)}
+.mdl-sec{margin:0;padding-left:20px;font-size:13.5px}.mdl-sec li{margin:2px 0}
+.mdl-dl{display:grid;grid-template-columns:max-content 1fr;gap:4px 14px;margin:0;font-size:13.5px}.mdl-dl dt{color:var(--mute)}.mdl-dl dd{margin:0}
+.mdl-alert{margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--pill-ko-bg);color:var(--ink);border:1px solid var(--ko);font-size:13.5px}
+.mdl-alert b{display:block;margin-bottom:2px}
+.mdl-alert.warn{background:var(--pill-warn-bg);border-color:var(--warn)}
+.mdl-prev{margin-top:10px}.mdl-prev summary{cursor:pointer;color:var(--link);font-size:13px}
+.mdl-prev pre{white-space:pre-wrap;word-break:break-word;max-height:240px;overflow:auto;margin:8px 0 0;padding:10px;border-radius:8px;background:var(--card);border:1px solid var(--line);font:12.5px/1.5 ui-monospace,Menlo,monospace;color:var(--ink)}
+.mdl-actions{margin-top:12px;gap:8px;flex-wrap:wrap;align-items:center}
+.mdl-pick{margin-left:auto;min-width:0}.mdl-pick select{max-width:300px}
+.wd-box{margin:0 0 14px;padding:14px 16px;border-radius:12px;border:1px solid color-mix(in srgb,var(--acc2) 55%,var(--line));background:var(--soft)}
+.wd-box .row{gap:8px;flex-wrap:wrap}.wd-box h3{margin:0 0 4px;font-size:15px}
+.wd-note{font-size:12.5px;color:var(--mute);margin:6px 0 0}
+.wd-warn{margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--pill-warn-bg);color:var(--ink);font-size:13px}
+@media (max-width:760px){.mdl-pick{margin-left:0;width:100%}.mdl-pick select{max-width:none;width:100%}.mdl .mdl-file .path{max-width:100%}}
+.pill svg{width:12px;height:12px;vertical-align:-2px;margin-right:3px;stroke:currentColor;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.wd-box h3 svg,.wd-note svg{width:15px;height:15px;vertical-align:-3px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}

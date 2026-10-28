@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS = {
   onboarding: { aiOk: false, micOk: false, speechOk: false, dismissed: false, done: false },
   voice: { engine: 'piper', piperVoice: 'siwis', ttsVoice: '', ttsRate: 1, autoSpeak: false, stt: 'macos', sttUrl: 'https://api.openai.com/v1', sttModel: 'whisper-1' },
   jarvis: { cloudMailOk: false, converse: false },
+  update: { auto: true, checkHours: 6 },
   firstRunDone: false,
 };
 
@@ -112,7 +113,8 @@ function update(name, def, fn) {
 function normalizeSettings(s) {
   const D = DEFAULT_SETTINGS;
   const arr = (o, k, d) => { if (!Array.isArray(o[k])) o[k] = JSON.parse(JSON.stringify(d)); };
-  for (const sec of ['profile', 'ai', 'docs', 'veille', 'google', 'mail', 'brain', 'voice', 'jarvis']) if (!isObj(s[sec])) s[sec] = JSON.parse(JSON.stringify(D[sec]));
+  for (const sec of ['profile', 'ai', 'docs', 'veille', 'google', 'mail', 'brain', 'voice', 'jarvis', 'update']) if (!isObj(s[sec])) s[sec] = JSON.parse(JSON.stringify(D[sec]));
+  s.update.auto = s.update.auto !== false; s.update.checkHours = Math.min(72, Math.max(1, Math.floor(Number(s.update.checkHours)) || 6)); // mises à jour : 1 à 72 h
   arr(s.docs, 'folders', D.docs.folders); arr(s.veille, 'topics', []); arr(s.veille, 'days', D.veille.days);
   arr(s.google, 'accounts', []); arr(s.mail, 'accounts', []); arr(s.mail, 'vip', []); arr(s.profile, 'parlements', D.profile.parlements);
   if (typeof s.mail.watch !== 'boolean') s.mail.watch = true; if (typeof s.mail.notifyPreview !== 'boolean') s.mail.notifyPreview = true;

@@ -6,6 +6,7 @@ const templates = require('./templates');
 
 const ROOT = store.DOCS_DEFAULT;
 const SUBS = {
+  modeles: '00-Modeles',
   veille: '01-Veille',
   recherches: '02-Recherches',
   interpellations: '03-Interpellations-et-Questions',
@@ -29,9 +30,50 @@ function folderName(parlementId) {
   return n.startsWith('Parlement') ? n : 'Parlement-' + n;
 }
 
+const MODELES_README = `MODELES DE DOCUMENTS - mode d'emploi
+=====================================
+
+Deposez ici VOS modeles Word (.docx de preference) : une question ecrite, une question
+orale, une interpellation, une question d'actualite, une resolution... Quand Jarvis redige un
+texte pour ce parlement, il suit EXACTEMENT votre modele (structure, formules, ton, mise en
+page, en-tete, logo) et vous remet un fichier Word (.docx) pret a relire.
+
+COMMENT NOMMER LES FICHIERS (association automatique)
+  question-ecrite.docx          -> question ecrite
+  question-orale.docx           -> question orale (commission)
+  question-actualite.docx       -> question d'actualite (seance pleniere)
+  interpellation.docx           -> interpellation
+  resolution.docx               -> proposition de resolution
+  demande-explications.docx     -> demande d'explications (Senat)
+  recommandation.docx           -> proposition de recommandation (Benelux)
+Vous pouvez aussi choisir vous-meme le fichier de chaque type dans l'application (page Modeles).
+
+DEUX FACONS DE PREPARER UN MODELE
+  1. Modele a champs : ecrivez {{sujet}}, {{date}}, {{contexte}}, {{questions}}... ou <<sujet>>,
+     ou [Nom du ministre] la ou Jarvis doit ecrire. {{date}}, {{auteur}}, {{groupe}},
+     {{signature}} sont remplis automatiquement depuis votre profil.
+  2. Modele-exemple : une ancienne question deja redigee, sans aucun champ. Jarvis en deduit la
+     structure et le ton, puis reecrit le contenu paragraphe par paragraphe en gardant vos styles.
+
+FORMATS
+  .docx / .dotx : utilises directement (recommande).
+  .doc / .odt / .rtf / .pdf : convertis automatiquement SI LibreOffice ou OpenOffice est installe
+  sur ce Mac. Sinon, ouvrez le fichier dans Word et faites Enregistrer sous... > .docx.
+  .docm (macros) : refuses pour votre securite.
+
+CONFIDENTIALITE
+  Avec un moteur IA local (Ollama), vos modeles ne quittent jamais ce Mac. Avec un moteur en ligne,
+  un modele n'est envoye qu'avec votre accord explicite (page Modeles).
+  Jarvis ne depose et n'envoie jamais rien : vous relisez le Word avant tout depot.
+
+Les sous-dossiers _convertis et _corbeille sont geres par Jarvis (la corbeille contient les modeles
+retires : vous pouvez les recuperer).
+`;
+
 function ensure(parlementId) {
   const base = path.join(ROOT, folderName(parlementId));
   for (const s of Object.values(SUBS)) fs.mkdirSync(path.join(base, s), { recursive: true });
+  try { fs.writeFileSync(path.join(base, SUBS.modeles, 'LISEZ-MOI.txt'), MODELES_README, { flag: 'wx', mode: 0o644 }); } catch { /* déjà présent */ }
   return base;
 }
 

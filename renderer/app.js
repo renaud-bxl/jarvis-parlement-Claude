@@ -1,6 +1,6 @@
 // Routeur et démarrage.
 const NAV = [
-  ['accueil', 'Jarvis', 'orb'], ['tableau', 'Tableau de bord', 'home'], ['dossiers', 'Dossiers', 'folder'], ['recherche', 'Recherche', 'search'], ['redaction', 'Rédiger', 'pen'],
+  ['accueil', 'Jarvis', 'orb'], ['tableau', 'Tableau de bord', 'home'], ['dossiers', 'Dossiers', 'folder'], ['recherche', 'Recherche', 'search'], ['redaction', 'Rédiger', 'pen'], ['modeles', 'Modèles', 'layers'],
   ['documents', 'Documents', 'file'], ['courriels', 'Courriels', 'mail'], ['agenda', 'Agenda', 'cal'], ['veille', 'Veille', 'eye'], ['assistant', 'Assistant', 'chat'],
   'sep', ['parlements', 'Parlements', 'bank'], ['cerveau', 'Cerveau', 'brain'], ['reglages', 'Réglages', 'gear'], ['diagnostic', 'Diagnostic', 'pulse'],
 ];

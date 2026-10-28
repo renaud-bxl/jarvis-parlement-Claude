@@ -17,8 +17,9 @@ function isLoopbackHost(h) {
   return h === 'localhost' || h.endsWith('.localhost') || h === '::1' || /^127\.\d+\.\d+\.\d+$/.test(h);
 }
 function isPrivateHost(h) {
-  h = String(h || '').toLowerCase().replace(/^\[|\]$/g, '');
+  h = String(h || '').toLowerCase().replace(/^\[|\]$/g, '').replace(/\.+$/, '');   // « localhost. » = localhost
   if (!h || isLoopbackHost(h)) return true;
+  if (h.includes(':')) return true;                  // adresse IPv6 littérale (::ffff:7f00:1…) : jamais une adresse de site public légitime
   if (!h.includes('.') && !h.includes(':')) return true; // nom de machine du réseau interne
   if (/\.(local|internal|lan|home|corp|intranet)$/.test(h)) return true;
   if (/^(0\.|10\.|127\.|169\.254\.|192\.168\.)/.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || /^(fc|fd|fe80)/.test(h) || h === '::') return true;
@@ -169,12 +170,14 @@ async function httpJson(url, opts, label, o = {}) {
 }
 
 // ---------- Fournisseurs ----------
-async function anthropic({ system, messages, web, fast, maxTokens, signal, timeoutMs }) {
+async function anthropic({ system, messages, web, fast, maxTokens, signal, timeoutMs, domains }) {
   const ai = cfg();
   const key = store.getSecret('anthropic_key');
   if (!key) throw new Error("Aucune clé Claude enregistrée. Ouvre Réglages › Moteur IA.");
   const model = fast ? (ai.fastModel || ai.model) : ai.model;
-  const tools = web ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }] : undefined;
+  const allowed = cleanDomains(domains);
+  // allowed_domains : l'outil de recherche ne remonte QUE des pages de ces domaines (sous-domaines compris).
+  const tools = web ? [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6, ...(allowed.length ? { allowed_domains: allowed } : {}) }] : undefined;
   let msgs = messages.map((m) => ({ role: m.role, content: m.content }));
   let text = ''; const sources = new Map(); let stop = '';
   for (let turn = 0; turn < 5; turn++) {
@@ -232,29 +235,59 @@ function htmlToText(html) {
     .replace(/\s+/g, ' ').trim();
 }
 
+// Résolution DNS injectable (tests). Un nom public qui pointe vers une adresse privée (« rebinding ») est refusé.
+let resolver = async (host) => (await require('dns').promises.lookup(host, { all: true })).map((x) => x.address);
+async function resolvesToPrivate(host) {
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host)) return false;   // déjà jugé par isPrivateHost
+  try {
+    const addrs = await Promise.race([resolver(host), new Promise((_, rej) => setTimeout(() => rej(new Error('dns-timeout')), 2500))]);
+    return (addrs || []).some((a) => isPrivateHost(a) || /^(::1?|::ffff:)/i.test(String(a)) || /^(0\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.)/.test(String(a)));
+  } catch { return false; }   // DNS indisponible : la requête échouera d'elle-même
+}
+
 // GET borné : http(s) uniquement, jamais vers le réseau interne (y compris par redirection), 3 sauts max, taille et durée limitées.
-async function safeGet(url, { timeoutMs = 10000, maxBytes = 1.5 * 1024 * 1024 } = {}) {
+// Options : userAgent, accept, dnsCheck (refuse un nom qui se résout vers une adresse privée ; trustHosts = hôtes connus, dispensés),
+// full (renvoie { body, status, url, contentType } au lieu du seul texte).
+async function safeGet(url, { timeoutMs = 10000, maxBytes = 1.5 * 1024 * 1024, userAgent, accept, dnsCheck = false, trustHosts, full = false } = {}) {
   let cur = url;
   for (let hop = 0; hop < 4; hop++) {
     const u = new URL(cur);
     if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('Adresse refusée.');
+    if (u.username || u.password) throw new Error('Adresse refusée.');
     if (isPrivateHost(u.hostname)) throw new Error('Adresse interne refusée.');
-    const r = await fetch(u.href, { headers: { 'user-agent': 'Mozilla/5.0 JarvisParlement' }, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
+    if (dnsCheck && !(trustHosts && trustHosts.has(u.hostname.toLowerCase())) && await resolvesToPrivate(u.hostname)) throw new Error('Adresse interne refusée.');
+    const r = await fetch(u.href, { headers: { 'user-agent': userAgent || 'Mozilla/5.0 JarvisParlement', ...(accept ? { accept } : {}) }, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) });
     if (r.status >= 300 && r.status < 400 && r.headers?.get?.('location')) { cur = new URL(r.headers.get('location'), u).href; continue; }
     const ct = String(r.headers?.get?.('content-type') || 'text/html');
-    if (!/text\/|html|xml/i.test(ct)) return '';
-    return await readCapped(r, maxBytes);
+    const status = Number(r.status) || 200;
+    if (!/text\/|html|xml/i.test(ct)) return full ? { body: '', status, url: u.href, contentType: ct } : '';
+    const body = await readCapped(r, maxBytes);
+    return full ? { body, status, url: u.href, contentType: ct } : body;
   }
   throw new Error('Trop de redirections.');
 }
 
-async function fallbackWebContext(query) {
-  const html = await safeGet('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(query), { timeoutMs: 12000 });
+// Nettoie une liste de domaines (sans schéma, sans chemin) : utilisée pour restreindre la recherche aux sources choisies.
+function cleanDomains(list, max = 60) {
+  const out = [];
+  for (const d of Array.isArray(list) ? list : []) {
+    const h = String(d || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+    if (/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(h) && !isPrivateHost(h) && !out.includes(h)) out.push(h);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+const hostMatches = (url, domains) => { try { const h = new URL(url).hostname.toLowerCase().replace(/^www\./, ''); return domains.some((d) => h === d || h.endsWith('.' + d)); } catch { return false; } };
+
+async function fallbackWebContext(query, { domains } = {}) {
+  const doms = cleanDomains(domains);
+  const q = doms.length ? `${query} (${doms.slice(0, 10).map((d) => 'site:' + d).join(' OR ')})` : query;
+  const html = await safeGet('https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q), { timeoutMs: 12000 });
   const links = [];
   for (const m of html.matchAll(/class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g)) {
     let u = m[1].replace(/&amp;/g, '&'); const q = u.match(/uddg=([^&]+)/); if (q) { try { u = decodeURIComponent(q[1]); } catch { continue; } }
-    if (/^https?:/.test(u)) links.push({ url: u, title: htmlToText(m[2]) });
-    if (links.length >= 4) break;
+    if (/^https?:/.test(u) && (!doms.length || hostMatches(u, doms))) links.push({ url: u, title: htmlToText(m[2]) });   // restriction : un résultat hors des sources choisies est écarté
+    if (links.length >= (doms.length ? 5 : 4)) break;
   }
   return Promise.all(links.map(async (l) => {
     try { return { ...l, text: htmlToText(await safeGet(l.url)).slice(0, 6000) }; }
@@ -288,7 +321,7 @@ async function completeRaw(o) {
   const system = String(o.system || '');
   let out;
   if (ai.provider === 'anthropic') {
-    out = await anthropic({ system, messages, web: o.web && ai.webSearch, fast: o.fast, maxTokens, signal: o.signal, timeoutMs: o.timeoutMs });
+    out = await anthropic({ system, messages, web: o.web && ai.webSearch, fast: o.fast, maxTokens, signal: o.signal, timeoutMs: o.timeoutMs, domains: o.domains });
   } else {
     let sources = []; let msgs = messages;
     if (o.web && ai.webSearch) {
@@ -296,7 +329,7 @@ async function completeRaw(o) {
       let block;
       try {
         const last = messages[messages.length - 1];
-        const pages = await fallbackWebContext(String(last.content).slice(0, 200));
+        const pages = await fallbackWebContext(typeof o.query === 'string' && o.query.trim() ? o.query.trim().slice(0, 200) : String(last.content).slice(0, 200), { domains: o.domains });
         sources = pages.map(({ url, title }) => ({ url, title }));
         block = wrapData('résultats web', pages.map((p, i) => `[${i + 1}] ${p.title} — ${p.url}\n${p.text}`).join('\n\n')) + '\n(Extraits à citer avec leur URL.)';
       } catch { block = '(La recherche web a échoué : signale-le dans ta réponse.)'; }
@@ -360,4 +393,4 @@ async function listModels({ provider, baseUrl, key } = {}) {
   } catch (e) { return { models: [], error: prov === 'ollama' ? "Ollama ne répond pas : est-il lancé ? (ollama.com)" : e.message }; }
 }
 
-module.exports = { isOpenAICloud, complete, ping, isLocal, configured, parseJson, listLocalModels, listModels, wrapData, DATA_RULE, redact, abortAll, isLoopbackHost, isPrivateHost, safeGet, __test: { setBackoff: (a) => { BACKOFF = a; } } };
+module.exports = { isOpenAICloud, complete, ping, isLocal, configured, parseJson, listLocalModels, listModels, wrapData, DATA_RULE, redact, abortAll, isLoopbackHost, isPrivateHost, safeGet, cleanDomains, __test: { setBackoff: (a) => { BACKOFF = a; }, setResolver: (f) => { resolver = f; } } };

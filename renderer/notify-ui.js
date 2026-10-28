@@ -4,7 +4,7 @@
 // Une alerte de courriel ouvre ce courriel dans « Courriels ». Compteur d'alertes de suivi : badge de la barre latérale.
 (() => {
   const MAX_VISIBLE = 4; const MAX_EXPANDED = 12; const MAX_KEPT = 30; const TTL = 12000;
-  const ICONS = { mail: '✉️', urgent: '🚨', veille: '📰', brain: '🧠', ok: '✅', err: '⚠️', error: '⚠️', info: 'ℹ️', agenda: '📅' };
+  const ICONS = { mail: '✉️', urgent: '🚨', veille: '📰', brain: '🧠', ok: '✅', err: '⚠️', error: '⚠️', info: 'ℹ️', agenda: '📅', update: '\u2B06\uFE0F' };
   const CSS = `#al-root{position:fixed;right:20px;bottom:20px;z-index:99;display:flex;flex-direction:column;gap:8px;width:min(380px,calc(100vw - 40px));max-height:calc(100vh - 40px);overflow:visible;pointer-events:none}
 body:has(#main.jv-main) #al-root{bottom:92px}
 #al-root.open{overflow-y:auto;pointer-events:auto}

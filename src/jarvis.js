@@ -399,9 +399,10 @@ const ACTIONS = {
     if (!topic) return { say: 'Sur quel sujet voulez-vous que je fasse la veille ?' };
     research.needAI();
     const r = await research.runVeille([{ label: topic, keywords: '', parlement: '' }]);
-    if (!r.items.length) return { say: r.errors.length ? `La veille a échoué. ${r.errors[0]}` : `Je n'ai rien trouvé de nouveau sur ${topic} ces derniers jours.`, md: r.errors.join('\n') };
+    const consulted = (r.sources || []).length ? ` J'ai interrogé ${r.sources.length} sources (${r.sources.slice(0, 4).map((x) => x.name.replace(/\s*\(.*$/, '')).join(', ')}…) : la liste est à l'écran.` : '';
+    if (!r.items.length) return { say: r.errors.length ? `La veille a échoué. ${r.errors[0]}` : `Je n'ai rien trouvé de nouveau sur ${topic} ces derniers jours.${consulted}`, md: r.errors.join('\n') + (r.sourcesMd || '') };
     const top = r.items.sort((a, b) => b.score - a.score);
-    const md = `## Veille : ${topic}\n\n` + top.map((i) => `### ${i.title}\n*${i.source || ''}${i.date ? ' · ' + i.date : ''}*\n\n${i.summary}\n\n**Piste :** ${i.idea}\n\n${i.url}`).join('\n\n---\n\n');
+    const md = `## Veille : ${topic}\n\n` + top.map((i) => `### ${i.title}\n*${i.source || ''}${i.date ? ' · ' + i.date : ''}*\n\n${i.summary}\n\n**Piste :** ${i.idea}\n\n${i.url}`).join('\n\n---\n\n') + (r.sourcesMd ? '\n\n' + r.sourcesMd : '');
     const say = await oral(md, `J'ai trouvé ${top.length} élément${top.length > 1 ? 's' : ''} sur ${topic}. Le plus important : ${top[0].title}.`);
     return { say, md, link: { label: 'Ouvrir la veille', page: 'veille' }, suggest: [`Rédige une question sur ${topic}`, `Fais une recherche sur ${topic}`] };
   },
@@ -411,7 +412,7 @@ const ACTIONS = {
     if (!store.settings.get().veille.topics.length) return { say: "Vous ne suivez encore aucun sujet de veille. Dites-moi « fais une veille sur » suivi d'un sujet, ou ouvrez la page Veille.", navigate: 'veille' };
     const r = await research.runVeille();
     const say = r.created ? `La veille est faite : ${r.created} nouveauté${r.created > 1 ? 's' : ''}. Les rapports sont rangés dans le dossier Veille de votre parlement.` : (r.errors.length ? `La veille a rencontré un problème : ${r.errors[0]}` : "Rien de nouveau depuis la dernière veille.");
-    return { say, md: r.items.map((i) => `- **${i.title}** (${i.topic}) — ${i.summary}`).join('\n'), link: { label: 'Ouvrir la veille', page: 'veille' } };
+    return { say, md: r.items.map((i) => `- **${i.title}** (${i.topic}) — ${i.summary}`).join('\n') + (r.sourcesMd ? '\n\n' + r.sourcesMd : ''), link: { label: 'Ouvrir la veille', page: 'veille' } };
   },
 
   async recherche({ query, parlement }) {
@@ -425,8 +426,10 @@ const ACTIONS = {
     if (!subject) return { say: 'Sur quel sujet voulez-vous que je rédige ?' };
     const ins = pickInstrument(kind); if (!ins) return { say: "Je ne trouve aucun modèle pour ce parlement.", navigate: 'parlements' };
     const r = await research.draft({ instrumentId: ins.id, subject });
-    const say = `Voilà, j'ai rédigé votre ${ins.label.toLowerCase()} sur ${subject}. Elle est affichée à l'écran et enregistrée dans le dossier de votre parlement. Relisez-la avant tout dépôt : les éléments non confirmés sont marqués à vérifier.`;
-    return { say, md: r.text, file: r.file, link: { label: 'Ouvrir dans Rédiger', page: 'redaction' }, readAloud: r.text, suggest: ['Lis-moi le texte', 'Fais une recherche sur ' + subject] };
+    const word = r.docx ? ` Le fichier Word est prêt${r.model && r.model.used ? ", rédigé d'après votre modèle" : ''} : il est rangé dans le dossier Interpellations et Questions de votre parlement, et vous pouvez le télécharger ou l'ouvrir depuis l'écran.` : ` Elle est affichée à l'écran et enregistrée dans le dossier de votre parlement.`;
+    const say = `Voilà, j'ai rédigé votre ${ins.label.toLowerCase()} sur ${subject}.${word}${r.modelNote ? ' Attention : ' + r.modelNote.replace(/\s+/g, ' ').slice(0, 220) : ''} Relisez-la avant tout dépôt : les éléments non confirmés sont marqués à vérifier.`;
+    const files = r.docx ? [{ label: 'Télécharger le Word', path: r.docx, kind: 'docx' }, { label: 'Ouvrir dans Word', path: r.docx, kind: 'open' }] : [];
+    return { say, md: r.text, file: r.docx || r.file, docx: r.docx || '', files, link: { label: 'Ouvrir dans Rédiger', page: 'redaction' }, readAloud: r.text, suggest: ['Lis-moi le texte', 'Fais une recherche sur ' + subject] };
   },
 
   async briefing() {
@@ -533,8 +536,9 @@ const ACTIONS = {
     research.needAI();
     const msgs = [...(ctx.history || []).slice(-8).map((m) => ({ role: m.role, content: String(m.content).slice(0, 1500) })), { role: 'user', content: ctx.text }];
     const r = await research.chat({ messages: msgs, useWeb: !!web, useDocs: true, allowCloud: llm.isLocal() || ctx.confirmed === true || store.settings.get().jarvis.cloudMailOk === true });
-    const say = r.text.length < 420 ? r.text : await oral(r.text, 'Voici ma réponse, détaillée à l\'écran.');
-    return { say: J_plain(say), md: r.text, sources: r.sources, readAloud: r.text.length < 420 ? undefined : r.text };
+    const spoken = r.spoken || r.text; // sans le pied « Sources interrogées » (affiché à l'écran, jamais lu à voix haute)
+    const say = spoken.length < 420 ? spoken : await oral(spoken, 'Voici ma réponse, détaillée à l\'écran.');
+    return { say: J_plain(say), md: r.text, sources: r.sources, readAloud: spoken.length < 420 ? undefined : spoken };
   },
 };
 const J_plain = (t) => String(t).replace(/[#*_`>|]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim();

@@ -36,6 +36,7 @@ J.pages.redaction = async (root) => {
   const opts = await dossierOptions();
   root.innerHTML = `<h1>Rédiger une question ou une interpellation</h1><p class="sub">Choisis le parlement : le modèle (structure, ton, destinataire, rappels réglementaires) s'adapte. Texte sauvegardé dans <b>03-Interpellations-et-Questions</b>.</p>
     <div class="card"><div class="grid g2"><div><label class="f">Parlement</label><select id="wp">${J.parlOptions(pre.parlement || J.P.actif)}</select></div><div><label class="f">Modèle</label><select id="wi"></select></div></div>
+    <div id="wModel" class="wd-note" aria-live="polite"></div>
     <div class="grid g2"><div><label class="f">Langue</label><select id="wl"><option value="">Par défaut (${J.esc(LANGS[J.S.profile.langue] || J.S.profile.langue)})</option><option value="fr">Français</option><option value="nl">Néerlandais</option><option value="en">Anglais</option></select></div>
     <div><label class="f">Dossier lié (optionnel)</label><select id="wd"><option value="">— aucun —</option>${opts}</select></div></div>
     <div class="row sp"><label class="f">Sujet / angle</label>${J.micBtn('ws')}</div><input id="ws" data-enter="doDraft" value="${J.esc(pre.subject || '')}" placeholder="Ex. Retards récurrents du tram 10">
@@ -43,13 +44,32 @@ J.pages.redaction = async (root) => {
     <label class="f">Consignes spécifiques</label><input id="wx" data-enter="doDraft" placeholder="Ex. Ton ferme, insister sur le budget">
     <div class="row" style="margin-top:12px"><button class="gold" data-act="doDraft">${J.icon('pen')} Rédiger avec Jarvis</button><span class="muted small">Jarvis prépare un brouillon : rien n'est envoyé ni déposé sans ta validation.</span></div></div><div id="wOut" aria-live="polite"></div>`;
   J.bindParl('wp', 'wi');
+  // Modèle Word de l'utilisateur pour ce parlement et ce type de document (page Modèles).
+  let tok = 0;
+  const refresh = async () => {
+    const t = ++tok, box = document.getElementById('wModel'); if (!box) return;
+    try {
+      const d = await J.call('modeles.list', { parlementId: J.val('wp') }); if (t !== tok || !document.getElementById('wModel')) return;
+      J.state.mdOffice = !!d.office.found; const it = d.instruments.find((x) => x.id === J.val('wi')); const m = it && it.model;
+      if (!it) box.innerHTML = 'Modèle personnalisé : Jarvis produit un Word standard (les modèles Word se rattachent aux types de documents du parlement).';
+      else if (!m) box.innerHTML = `${J.icon('file')} Aucun modèle Word pour ce type : Jarvis produira un Word standard. <a href="#modeles">Ajouter mon modèle</a>`;
+      else if (m.status !== 'ok') box.innerHTML = `<span class="pill ko">Modèle inutilisable</span> ${J.esc(m.file)} : ${J.esc(m.error)} <a href="#modeles">Voir</a>`;
+      else box.innerHTML = `<span class="pill ok">${J.icon('check')} Modèle Word</span> Jarvis rédigera exactement comme <b>${J.esc(m.file)}</b>.${J.S._env.local ? '' : (d.consentCloud ? ' <span class="muted">(envoi au moteur en ligne autorisé)</span>' : '<label class="chk"><input type="checkbox" id="wCloud"> J\'autorise l\'envoi de ce modèle à mon moteur IA en ligne pour cette rédaction (sinon : Word standard)</label>')}`;
+    } catch (e) { if (t === tok) box.textContent = ''; }
+  };
+  document.getElementById('wp').addEventListener('change', refresh); document.getElementById('wi').addEventListener('change', refresh); refresh();
 };
+const wordBox = (r) => `<div class="wd-box"><h3>${J.icon('file')} Ton fichier Word est prêt</h3><p class="path" style="margin:2px 0 8px">${J.esc(r.docx)}</p><div class="row">${J.docxButtons(r.docx, { name: r.docxName, office: !!J.state.mdOffice })}</div>
+  <p class="wd-note">${r.model && r.model.used ? `Rédigé d'après ton modèle <b>${J.esc(r.model.file)}</b> (styles, en-tête, logo et marges conservés).` : 'Document Word standard généré par Jarvis (aucun modèle utilisé).'} Enregistré dans 03-Interpellations-et-Questions.</p>
+  ${r.modelNote ? `<div class="wd-warn" role="status">${J.esc(r.modelNote)}</div>` : ''}${r.checks ? `<p class="wd-note"><b>À vérifier avant dépôt :</b> ${J.esc(r.checks)}</p>` : ''}</div>`;
 J.act.doDraft = (el) => J.busy(el, async () => {
   if (!J.val('ws').trim()) { document.getElementById('ws').focus(); throw new Error('Indique le sujet de ton texte.'); }
   document.getElementById('wOut').innerHTML = `<div class="card"><p class="muted small"><span class="spin" aria-hidden="true"></span> Jarvis rédige ton brouillon…</p>${J.skeleton(3)}<button class="sm" data-act="aiCancel">Arrêter</button></div>`;
-  let r; try { r = await J.call('draft.run', { instrumentId: J.val('wi'), subject: J.val('ws'), context: J.val('wc'), language: J.val('wl') || undefined, dossierId: J.val('wd') || undefined, instructions: J.val('wx') }); } catch (e) { outError('wOut', e, 'doDraft'); throw e; }
+  let r; try { r = await J.call('draft.run', { instrumentId: J.val('wi'), subject: J.val('ws'), context: J.val('wc'), language: J.val('wl') || undefined, dossierId: J.val('wd') || undefined, instructions: J.val('wx'), allowCloud: J.S._env.local ? true : !!(document.getElementById('wCloud') && document.getElementById('wCloud').checked) }); } catch (e) { outError('wOut', e, 'doDraft'); throw e; }
   J.state.lastDraft = { ...r, dossierId: J.val('wd') || undefined };
   document.getElementById('wOut').innerHTML = `<div class="card"><div class="row sp"><h2>${J.esc(r.label)} <span class="muted small">· ${J.esc(r.parlement)}</span></h2><span class="row">${J.speakBtn('#wText')}<button class="sm" data-act="wFb" data-v="1" aria-label="Bon brouillon" title="Bon brouillon">${J.icon('up')}</button><button class="sm" data-act="wFb" data-v="-1" aria-label="Brouillon à améliorer" title="À améliorer">${J.icon('down')}</button></span></div>
+ ${r.docx ? wordBox(r) : ''}${r.docxError ? `<div class="wd-warn" role="alert">${J.esc(r.docxError)}</div>` : ''}
+    <p class="wd-note" style="margin:0 0 6px">Aperçu du texte${r.docx ? ' (le fichier Word est déjà enregistré ; tes corrections ci-dessous servent à l\'export .md et à faire progresser Jarvis)' : ''} :</p>
     <textarea class="big" id="wText" aria-label="Texte du brouillon">${J.esc(r.text)}</textarea>
     <div class="row" style="margin-top:10px"><button class="pri sm" data-act="wLearn">Enregistrer mes corrections</button><button class="sm" data-act="wCopy">${J.icon('copy')} Copier</button><button class="sm" data-act="wExport">Exporter .md</button><button class="sm" data-act="wMail">Créer un courriel</button>${J.val('wd') ? '' : '<button class="sm" data-act="wDossier">Créer un dossier avec ce texte</button>'}</div>
     ${r.file ? `<p class="path">Enregistré : ${J.esc(r.file)}</p>` : ''}</div>`;

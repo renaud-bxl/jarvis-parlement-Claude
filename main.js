@@ -49,8 +49,10 @@ function setup() {
     const from = e.senderFrame && e.senderFrame.url;
     if (!win || e.sender !== win.webContents || !isOurPage(from)) return { __error: 'Appel refusé.' };
     if (typeof method !== 'string' || !Object.prototype.hasOwnProperty.call(api, method)) return { __error: 'Méthode inconnue.' };
+    const done = require('./src/updater').track(method); // « occupé » : l'installation d'une mise à jour n'est jamais proposée en douce pendant un envoi / une demande IA
     try { return await api[method](args && typeof args === 'object' && !Array.isArray(args) ? args : {}); }
     catch (err) { return { __error: redact((err && err.message) || String(err)) }; }
+    finally { done(); }
   });
 
   scheduler.init({
@@ -86,6 +88,30 @@ function startMailWatch() {
   try {
     modules.mailwatch.start({ emit, notify: notifyNative, onCounts: (c) => { try { if (app.dock) app.dock.setBadge(c && c.count ? String(c.count) : ''); } catch { /* ok */ } } });
   } catch (e) { console.error('Surveillance des courriels :', redact(e.message)); }
+}
+
+// Mises à jour depuis GitHub : vérification régulière, alerte dans l'app + notification macOS (une fois par version) ; l'installation, elle, n'a lieu qu'au clic.
+function notifyUpdate({ title, body } = {}) {
+  try {
+    if (!Notification.isSupported() || (win && !win.isDestroyed() && win.isVisible() && win.isFocused())) return; // fenêtre au premier plan : l'alerte de l'app suffit
+    const n = new Notification({ title: String(title || 'Jarvis Parlement').slice(0, 120), body: String(body || '').slice(0, 300) });
+    liveNotifs.add(n); n.on('close', () => liveNotifs.delete(n));
+    n.on('click', () => {
+      liveNotifs.delete(n);
+      if (!win || win.isDestroyed()) createWindow(); else { if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+      setTimeout(() => emit('update-available', { open: true }), 600); // l'interface ouvre la fenêtre « Nouvelle version »
+    });
+    n.show();
+  } catch { /* notification impossible : l'alerte de l'application reste */ }
+}
+function startUpdater() {
+  try {
+    modules.updater = require('./src/updater').init({
+      version: app.getVersion(), packaged: app.isPackaged, exePath: app.getPath('exe'), arch: process.arch, pid: process.pid,
+      downloadsDir: app.getPath('downloads'), emit, notify: notifyUpdate, quit: () => app.quit(), openPath: (p) => shell.openPath(p),
+    });
+    modules.updater.start();
+  } catch (e) { console.error('Mises à jour :', redact(e.message)); }
 }
 
 function createWindow() {
@@ -155,6 +181,7 @@ function cleanup() {
   try { modules && modules.indexer.cancel(); } catch { /* ok */ }
   try { modules && modules.scheduler.stop(); } catch { /* ok */ }
   try { modules && modules.mailwatch && modules.mailwatch.stop(); } catch { /* ok */ }
+  try { modules && modules.updater && modules.updater.stop(); } catch { /* ok */ }
 }
 app.on('before-quit', cleanup);
 app.on('will-quit', cleanup);
@@ -162,7 +189,7 @@ process.on('exit', cleanup);
 
 if (gotLock) {
   app.whenReady().then(() => {
-    setup(); menu(); createWindow(); startMailWatch();
+    setup(); menu(); createWindow(); startMailWatch(); startUpdater();
     // Voix de Jarvis : toujours une voix humaine (féminine par défaut, fournie avec l'application), chargée dès le démarrage.
     try { modules.voice.ensureDefault((c, d) => emit(c, d)).then(() => modules.voice.warm()).catch(() => {}); } catch { /* sans voix : texte seulement */ }
   });

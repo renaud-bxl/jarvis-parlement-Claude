@@ -48,7 +48,7 @@ async function tick() {
     store.settings.set({ veille: { lastRun: store.now() } }); // marque AVANT : aucune double exécution même si l'app plante en cours de route
     const r = await runner();
     attempts = 0; retryAt = 0;
-    notify('Veille terminée', `${r.created} nouveauté(s) détectée(s).${r.errors && r.errors.length ? ' ' + r.errors.length + ' sujet(s) en erreur.' : ''}`);
+    notify('Veille terminée', `${r.created} nouveauté(s) détectée(s)${r.sources && r.sources.length ? ' dans ' + r.sources.length + ' source(s) consultée(s)' : ''}.${r.errors && r.errors.length ? ' ' + r.errors.length + ' sujet(s) en erreur.' : ''}`);
   } catch (e) {
     const network = /injoignable|Impossible de joindre|ne répond pas|connexion/i.test(e.message || '');
     if (network && attempts < 3) { // hors-ligne : on retente dans 15 min (3 fois), sans perdre la veille du jour

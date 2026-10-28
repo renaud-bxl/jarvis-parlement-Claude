@@ -10,6 +10,9 @@ const indexer = require('./indexer');
 const google = require('./google');
 const mail = require('./mail');
 const workspace = require('./workspace');
+const sources = require('./sources');
+const feeds = require('./feeds');
+const modeles = require('./modeles');
 const activeParl = () => store.settings.get().profile.parlementActif || store.settings.get().profile.parlements[0];
 const clip = (v, n) => String(v == null ? '' : v).slice(0, n);
 const httpUrl = (u) => { try { const x = new URL(String(u)); return (x.protocol === 'https:' || x.protocol === 'http:') ? x.href : ''; } catch { return ''; } };
@@ -31,10 +34,25 @@ Règles impératives :
 ${'${SEC}'}
 Date du jour : ${'${DATE}'}.`;
 
-function system(extra = '') {
+// opts.web === true : demande AVEC recherche web -> catalogue complet des sources cochées + règles (« ne renvoie jamais l'utilisateur chercher lui-même »).
+// Par défaut : règles courtes sans catalogue (économise des jetons). opts.sources === false : aucune consigne de sources.
+function system(extra = '', opts = {}) {
   const date = new Date().toLocaleDateString('fr-BE', { dateStyle: 'full', timeZone: 'Europe/Brussels' });
-  return [BASE.replace('${DATE}', date).replace('${SEC}', llm.DATA_RULE), brain.promptBlock(), extra].filter(Boolean).join('\n\n');
+  const src = opts.sources === false ? '' : sources.promptBlock({ search: opts.web === true });
+  return [BASE.replace('${DATE}', date).replace('${SEC}', llm.DATA_RULE), brain.promptBlock(), src, extra].filter(Boolean).join('\n\n');
 }
+// Recherche dans les sources cochées : flux RSS lus + domaines à imposer à la recherche web. Ne lève jamais d'exception.
+async function webContext(query, o = {}) {
+  let web = false; try { web = !!store.settings.get().ai.webSearch; } catch { /* réglages illisibles */ }
+  if (!web) return { g: null, block: '', plan: { domains: [] }, web: false };
+  let g = null, plan = { domains: [], hinted: [] };
+  try { plan = sources.searchPlan(o.parlement); } catch { /* sources illisibles : recherche sans restriction */ }
+  try { g = await sources.gather({ query, keywords: o.keywords, days: o.days, parlement: o.parlement, skipUrls: o.skipUrls }); } catch { g = null; }
+  return { g, block: g ? sources.contextBlock(g) : '', plan, web: true };
+}
+// Sources utilisables dans la réponse : celles du moteur + les articles de flux cités.
+const mergeSources = (list, g, text) => { const m = new Map((list || []).map((x) => [x.url, x.title])); for (const x of sources.usedItems(g, text)) if (!m.has(x.url)) m.set(x.url, x.title); return [...m].map(([url, title]) => ({ url, title })); };
+const footerFor = (wc) => (wc.web ? sources.footerMd(wc.g, { web: true, domainsUsed: wc.plan.domains.length ? wc.plan.domains : (wc.plan.hinted || []), strict: wc.plan.domains.length > 0 }) : '');
 const parlementName = (id) => templates.all().parlements.find((p) => p.id === id)?.nom || id || '';
 function needAI() { if (!llm.configured()) throw new Error("Moteur IA non configuré. Ouvre Réglages › Moteur IA."); }
 
@@ -44,6 +62,7 @@ async function webResearch({ query, parlement, dossierId, deep } = {}) {
   query = needStr(query, 'Sujet de recherche', 2000);
   if (parlement && !templates.all().parlements.some((x) => x.id === parlement)) parlement = '';
   const p = parlement ? `Parlement ciblé : ${parlementName(parlement)}.` : '';
+  const wc = await webContext(query, { parlement: parlement || activeParl() });
   const out = await llm.complete({
     system: system(`MISSION : recherche web sur un sujet parlementaire. ${p}
 Format de sortie (markdown) :
@@ -54,13 +73,13 @@ Format de sortie (markdown) :
 ## Chiffres clés (avec source)
 ## Angles possibles pour une question ou une interpellation (5 pistes concrètes)
 ## Sources consultées (titre — URL)
-## Points à vérifier (ce qui n'a pas pu être confirmé)`),
-    prompt: `${deep ? 'Recherche approfondie. ' : ''}Sujet / projet : ${query}`,
-    web: true, maxTokens: 6000,
+## Points à vérifier (ce qui n'a pas pu être confirmé)`, { web: wc.web }),
+    prompt: `${deep ? 'Recherche approfondie. ' : ''}Sujet / projet : ${query}${wc.block ? '\n\n' + wc.block : ''}`,
+    web: true, maxTokens: 6000, domains: wc.plan.domains, query,
   });
-  const rec = { query, parlement: parlement || '', answer: out.text, sources: out.sources, model: out.model };
+  const rec = { query, parlement: parlement || '', answer: out.text + footerFor(wc), sources: mergeSources(out.sources, wc.g, out.text), model: out.model, consulted: wc.g ? sources.summary(wc.g) : null };
   if (dossierId) dossiers.addResearch(dossierId, rec);
-  rec.file = workspace.save(parlement || activeParl(), 'recherches', query, `# Recherche : ${query}\n\n${out.text}${srcMd(out.sources)}\n`);
+  rec.file = workspace.save(parlement || activeParl(), 'recherches', query, `# Recherche : ${query}\n\n${rec.answer}${srcMd(rec.sources)}\n`);
   brain.noteUsage('recherche', { parlement, theme: query.slice(0, 40) });
   brain.learnFromInteraction('recherche', query, out.text);
   return rec;
@@ -108,6 +127,7 @@ async function askIndex({ query, k = 6, synthesize, allowCloud } = {}) {
 
 // Veille
 let veilleRunning = false;
+const itemKey = (url, title) => feeds.canonUrl(url) || 't:' + feeds.fold(title).replace(/[^a-z0-9]+/g, ' ').trim();
 async function runVeille(override) {
   needAI();
   if (veilleRunning) throw new Error('Une veille est déjà en cours : patiente quelques instants.');
@@ -117,35 +137,42 @@ async function runVeille(override) {
   veilleRunning = true;
   try {
     const db0 = store.read('veille', { items: [], runs: [] });
-    const known = new Set((db0.items || []).map((i) => i.url || i.title));
+    const known = new Set((db0.items || []).map((i) => itemKey(i.url, i.title)));   // clés canoniques : une URL déjà vue (avec ou sans www, suivi, « / ») n'est jamais dupliquée
+    const seenSources = new Map(); let feedsOk = 0, feedsKo = 0;
     let created = 0; const errors = []; const runStart = store.now(); const fresh = [];
     for (const t of topics) {
       try {
+        const wc = await webContext(clip(t.label, 200), { days: 3, keywords: clip(t.keywords, 300), parlement: t.parlement || activeParl(), skipUrls: known });
+        if (wc.g) { for (const c of wc.g.consulted) { const prev = seenSources.get(c.id); seenSources.set(c.id, { id: c.id, name: c.name, feed: (prev && prev.feed) || c.feeds.some((f) => f.ok), via: c.viaFeed ? 'flux' : 'web' }); } feedsOk = Math.max(feedsOk, wc.g.stats.feedsOk); feedsKo = Math.max(feedsKo, wc.g.stats.feedsKo); }
         const out = await llm.complete({
-          system: system('MISSION : veille parlementaire et médiatique. Cherche sur le web les faits des 3 derniers jours (et l\'agenda parlementaire à venir) sur le sujet. Réponds par un JSON strict : {"items":[{"titre":"","resume":"","url":"","date":"AAAA-MM-JJ","source":"","pertinence":1-3,"piste":"idée de question ou d\'interpellation"}]}. 6 éléments maximum, uniquement des faits vérifiés par une page réellement consultée.'),
-          prompt: `Sujet de veille : ${clip(t.label, 200)}${t.keywords ? ' (mots-clés : ' + clip(t.keywords, 300) + ')' : ''}${t.parlement ? ' — Parlement : ' + parlementName(t.parlement) : ''}`,
-          web: true, json: true, maxTokens: 3500,
+          system: system('MISSION : veille parlementaire et médiatique. Cherche sur le web les faits des 3 derniers jours (et l\'agenda parlementaire à venir) sur le sujet. Réponds par un JSON strict : {"items":[{"titre":"","resume":"","url":"","date":"AAAA-MM-JJ","source":"","pertinence":1-3,"piste":"idée de question ou d\'interpellation"}]}. 6 éléments maximum, uniquement des faits vérifiés par une page réellement consultée (page web ou article de flux RSS ci-dessous).', { web: wc.web }),
+          prompt: `Sujet de veille : ${clip(t.label, 200)}${t.keywords ? ' (mots-clés : ' + clip(t.keywords, 300) + ')' : ''}${t.parlement ? ' — Parlement : ' + parlementName(t.parlement) : ''}${wc.block ? '\n\n' + wc.block : ''}`,
+          web: true, json: true, maxTokens: 3500, domains: wc.plan.domains, query: `${clip(t.label, 120)} ${clip(t.keywords, 80)}`,
         });
-        const items = Array.isArray(out.data?.items) ? out.data.items.slice(0, 8) : [];
+        let items = Array.isArray(out.data?.items) ? out.data.items.slice(0, 8) : [];
+        // Moteur peu fiable (JSON vide ou invalide) alors que des articles de flux correspondent au sujet : on les retient tels quels (titre, date, URL réels).
+        if (!items.length && wc.g) items = wc.g.items.filter((x) => x.url && x.score >= 2).slice(0, 5).map((x) => ({ titre: x.title, resume: x.summary, url: x.url, date: x.date ? feeds.ymdStr(feeds.bru(new Date(x.date))) : '', source: x.source, pertinence: 1, piste: '' }));
         for (const it of items) {
           if (!it || typeof it.titre !== 'string' || !it.titre.trim()) continue;
           const url = httpUrl(it.url); // jamais de javascript:, file: ou autre schéma venant du web
-          const key = url || it.titre; if (known.has(key)) continue; known.add(key);
+          const key = itemKey(url, it.titre); if (known.has(key)) continue; known.add(key);
           const rec = { id: store.uid('v'), topic: clip(t.label, 200), parlement: clip(t.parlement, 80), title: clip(it.titre, 300), summary: clip(it.resume, 2000), url, date: clip(it.date, 10), source: clip(it.source, 120), score: Math.min(3, Math.max(1, Number(it.pertinence) || 1)), idea: clip(it.piste, 600), found: store.now(), status: 'new' };
           fresh.unshift(rec); created++;
         }
       } catch (e) { errors.push(`${t.label} : ${e.message}`); }
     }
+    const consultedList = [...seenSources.values()];
+    const srcFooter = consultedList.length ? `\n## Sources consultées\n${consultedList.map((c) => `- ${c.name}${c.via === 'flux' ? (c.feed ? ' (flux RSS lu)' : ' (flux RSS injoignable, recherche web)') : ' (recherche web)'}`).join('\n')}\n` : '';
     const byP = {}; for (const i of fresh) (byP[i.parlement || activeParl()] ||= []).push(i);
-    for (const [pid, arr] of Object.entries(byP)) workspace.save(pid, 'veille', 'veille', `# Veille du ${new Date().toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels' })}\n\n` + arr.map((i) => `## ${i.title}\n*${i.topic}* · ${i.date || ''} · ${i.source || ''}\n\n${i.summary}\n\n**Piste :** ${i.idea}\n\n${i.url}\n`).join('\n'));
+    for (const [pid, arr] of Object.entries(byP)) workspace.save(pid, 'veille', 'veille', `# Veille du ${new Date().toLocaleDateString('fr-BE', { timeZone: 'Europe/Brussels' })}\n\n` + arr.map((i) => `## ${i.title}\n*${i.topic}* · ${i.date || ''} · ${i.source || ''}\n\n${i.summary}\n\n**Piste :** ${i.idea}\n\n${i.url}\n`).join('\n') + srcFooter);
     // Relit la base juste avant d'écrire : les changements faits pendant la veille (statuts, etc.) ne sont pas écrasés.
     const db = store.read('veille', { items: [], runs: [] });
     if (!Array.isArray(db.items)) db.items = []; if (!Array.isArray(db.runs)) db.runs = [];
     db.items = [...fresh, ...db.items].slice(0, 400);
-    db.runs.unshift({ t: store.now(), created, errors }); db.runs = db.runs.slice(0, 30);
+    db.runs.unshift({ t: store.now(), created, errors, sources: consultedList, feedsOk, feedsKo }); db.runs = db.runs.slice(0, 30);
     store.write('veille', db);
     if (!override) store.settings.set({ veille: { lastRun: store.now() } });
-    return { created, errors, items: fresh };
+    return { created, errors, items: fresh, sources: consultedList, feedsOk, feedsKo, sourcesMd: srcFooter };
   } finally { veilleRunning = false; }
 }
 const veilleItems = () => { const d = store.read('veille', { items: [], runs: [] }); if (!Array.isArray(d.items)) d.items = []; if (!Array.isArray(d.runs)) d.runs = []; return d; };
@@ -185,7 +212,7 @@ async function briefing({ refreshVeille, allowCloud } = {}) {
 }
 
 // Rédaction avec modèle par parlement
-async function draft({ instrumentId, subject, context, language, dossierId, instructions } = {}) {
+async function draft({ instrumentId, subject, context, language, dossierId, instructions, allowCloud } = {}) {
   needAI();
   subject = needStr(subject, 'Sujet', 2000); context = clip(context, 60000); instructions = clip(instructions, 4000);
   const tpl = typeof instrumentId === 'string' ? templates.instructions(instrumentId) : '';
@@ -194,15 +221,33 @@ async function draft({ instrumentId, subject, context, language, dossierId, inst
   let ctx = context;
   if (dossierId) { const d = dossiers.get(dossierId); ctx += '\n\nRECHERCHES DU DOSSIER :\n' + d.research.slice(0, 2).map((r) => String(r.answer || '').slice(0, 5000)).join('\n---\n') + (d.notes ? '\n\nNOTES :\n' + clip(d.notes, 20000) : ''); }
   const lang = ({ fr: 'français', nl: 'néerlandais', en: 'anglais' })[language || p.langue] || 'français';
-  const out = await llm.complete({
-    system: system(tpl + `\n\nMISSION : rédiger le texte prêt à relire, en ${lang}, au nom de ${p.nom || 'l\'utilisateur'}${p.titre ? ' (' + p.titre + ')' : ''}. N'invente aucun fait : tout élément non sourcé dans le contexte est marqué [À VÉRIFIER]. Pas de préambule : commence directement par le texte.${p.signature ? ' Signature : ' + p.signature : ''}`),
-    prompt: `Sujet : ${subject}\n${instructions ? 'Consignes spécifiques : ' + instructions + '\n' : ''}\nCONTEXTE ET FAITS DISPONIBLES :\n${ctx.trim() ? llm.wrapData('contexte fourni par l\'utilisateur et recherches du dossier', ctx) : '(aucun : base-toi sur le sujet et signale tout ce qui doit être vérifié)'}`,
-    maxTokens: 5000,
-  });
+  // 1. Modèle Word de l'utilisateur pour ce parlement et ce type de document (s'il existe) : le .docx est fabriqué à partir de SA copie.
+  //    Sans accord pour l'envoi du modèle à un moteur en ligne, ou en cas de problème, on retombe sur la trame interne (jamais de blocage).
+  let out = null; let docxBuf = null; let model = { used: false }; let modelNote = '';
+  try {
+    const r = await modeles.draftFromModel({ parlementId: f.parlement.id, instrumentId, subject, context: ctx, language, instructions, allowCloud, profile: p, system });
+    if (r.used) { out = { text: r.text }; docxBuf = r.buffer; model = { used: true, ...r.model }; modelNote = (r.notes || []).join(' '); }
+    else if (r.message) modelNote = r.message;
+  } catch (e) {
+    if (!e || !e.modele) throw e; // panne du moteur IA, réseau… : même comportement qu'avant
+    modelNote = `Ton modèle Word n'a pas pu être utilisé (${clip(e.message, 200)}). Un document standard a été généré.`;
+  }
+  if (!out) {
+    out = await llm.complete({
+      system: system(tpl + `\n\nMISSION : rédiger le texte prêt à relire, en ${lang}, au nom de ${p.nom || 'l\'utilisateur'}${p.titre ? ' (' + p.titre + ')' : ''}. N'invente aucun fait : tout élément non sourcé dans le contexte est marqué [À VÉRIFIER]. Pas de préambule : commence directement par le texte.${p.signature ? ' Signature : ' + p.signature : ''}`),
+      prompt: `Sujet : ${subject}\n${instructions ? 'Consignes spécifiques : ' + instructions + '\n' : ''}\nCONTEXTE ET FAITS DISPONIBLES :\n${ctx.trim() ? llm.wrapData('contexte fourni par l\'utilisateur et recherches du dossier', ctx) : '(aucun : base-toi sur le sujet et signale tout ce qui doit être vérifié)'}`,
+      maxTokens: 5000,
+    });
+  }
   brain.noteUsage('redaction', { instrument: f.instrument.label, parlement: f.parlement.nom, theme: String(subject).slice(0, 40) });
   brain.learnFromInteraction('redaction', `${f.instrument.label} — ${subject}\n${instructions || ''}`, out.text);
-  const rec = { text: out.text, instrumentId, label: f.instrument.label, parlement: f.parlement.nom, subject };
-  rec.file = workspace.save(f.parlement.id, 'interpellations', `${f.instrument.label}_${subject}`, `# ${f.instrument.label} — ${subject}\n\n*${f.parlement.nom}*\n\n${out.text}\n`);
+  const rec = { text: out.text, instrumentId, label: f.instrument.label, parlement: f.parlement.nom, subject, model, modelNote, checks: f.instrument.notes || '' };
+  rec.file = workspace.save(f.parlement.id, 'interpellations', `${f.instrument.label}_${subject}`, `# ${f.instrument.label} — ${subject}\n\n*${f.parlement.nom}*\n\n${out.text}\n${model.used && rec.checks ? `\n---\n*À vérifier avant dépôt : ${rec.checks}*\n` : ''}`);
+  // 2. Le fichier Word est TOUJOURS produit : à partir du modèle, sinon d'un document propre généré par Jarvis.
+  try {
+    if (!docxBuf) docxBuf = modeles.buildBasicDocx({ title: f.instrument.label, subtitle: `${f.parlement.nom} · ${new Date().toLocaleDateString('fr-BE', { dateStyle: 'long', timeZone: 'Europe/Brussels' })}`, subject, text: out.text, signature: p.signature || [p.nom, p.titre].filter(Boolean).join('\n'), footer: f.parlement.nom, author: p.nom });
+    rec.docx = modeles.saveDocx(f.parlement.id, f.instrument.label, subject, docxBuf); rec.docxName = path.basename(rec.docx);
+  } catch (e) { rec.docxError = `Le fichier Word n'a pas pu être enregistré : ${clip(e.message, 160)}`; }
   if (dossierId) { const saved = dossiers.addDraft(dossierId, { ...rec, original: out.text }); rec.draftId = saved?.id; }
   return rec;
 }
@@ -220,10 +265,16 @@ async function chat({ messages, useWeb, useDocs, allowCloud } = {}) {
     if (!cloudOk(allowCloud)) docsSkipped = true; // consentement cloud : sans accord, aucun extrait de document ne part
     else { hits = indexer.search(last, 5); if (hits.length) msgs[msgs.length - 1] = { role: 'user', content: last + '\n\n' + llm.wrapData("extraits des documents de l'utilisateur (cite le nom du fichier)", hits.map((h) => `[${h.name}] ${h.text}`).join('\n\n')) }; }
   }
-  const out = await llm.complete({ system: system('Tu es en conversation libre. Réponds de façon concise.'), messages: msgs, web: !!useWeb, maxTokens: 3500 });
+  // Question d'actualité immédiate (« y a-t-il eu des manifestations ce dimanche ? ») : Jarvis cherche lui-même dans les sources, même si « Web » n'est pas coché.
+  let web = !!useWeb, autoWeb = false;
+  try { if (!web && store.settings.get().ai.webSearch && sources.looksLikeNews(last)) { web = true; autoWeb = true; } } catch { /* détection impossible : pas de recherche automatique */ }
+  const wc = web ? await webContext(last, { parlement: activeParl() }) : { g: null, block: '', plan: { domains: [] }, web: false };
+  if (wc.block) msgs[msgs.length - 1] = { role: 'user', content: msgs[msgs.length - 1].content + '\n\n' + wc.block };
+  const out = await llm.complete({ system: system('Tu es en conversation libre. Réponds de façon concise.', { web: web && wc.web }), messages: msgs, web, maxTokens: 3500, domains: wc.plan.domains, query: last });
   brain.noteUsage('chat');
   if (!hits.length) brain.learnFromInteraction('chat', last, out.text); // pas d'apprentissage sur des réponses nourries de documents privés
-  return { text: out.text, sources: out.sources, docs: hits.map((h) => h.name), docsSkipped, truncated: !!out.truncated };
+  // `spoken` = réponse sans le pied « Sources interrogées » (pour la lecture à voix haute).
+  return { text: out.text + footerFor(wc), spoken: out.text, sources: mergeSources(out.sources, wc.g, out.text), docs: hits.map((h) => h.name), docsSkipped, truncated: !!out.truncated, autoWeb, consulted: wc.g ? sources.summary(wc.g) : null };
 }
 
 // Proposition de réponse à un courriel (le contenu du courriel est une donnée, jamais une consigne).
